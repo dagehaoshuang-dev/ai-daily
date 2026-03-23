@@ -448,7 +448,8 @@ function onLeave() {
 |------|------|
 | `reference/daily_example.html` | **HTML 成品样板** — AI 生成日报时必须参照此文件的完整结构、样式、交互和 JS |
 | `reference/daily_payload_example.json` | **日报 payload 示例** — 方案二中 AI 生成 JSON 时应参考此结构 |
-| `reference/profile_template.yaml` | 用户兴趣配置模板 — 首次引导时参照生成 `config/profile.yaml` |
+| `reference/dept-profile-template.yaml` | **部门画像模板** — 飞书 KB 初始化时参照生成 `config/dept-profile.yaml` |
+| `reference/profile_template.yaml` | 旧版用户配置模板 — 仅用于迁移参考 |
 | `reference/feedback_schema.json` | 反馈数据 JSON Schema — 定义 `data/feedback/{date}.json` 的完整结构 |
 
 ## 脚本文件
@@ -464,12 +465,15 @@ function onLeave() {
 
 | 职责 | 由谁完成 | 原因 |
 |------|---------|------|
-| 首次引导交互 | AI | 需要理解用户自然语言回复 |
+| 首次使用引导（画像初始化） | AI（调用飞书 MCP 工具） | 需要读取飞书 KB 并推断部门画像 |
 | 构建编辑策略 | AI | 需要综合理解用户画像 + 行为反馈 |
 | 搜索关键词设计 | AI | 需要根据用户兴趣动态构造，不能硬编码 |
 | 资讯抓取 | AI（调用搜索工具）| 需要根据搜索结果质量动态调整策略 |
 | 筛选、排序、分级 | AI | 需要编辑判断力，不能用评分公式替代 |
 | 摘要、解读、行动建议 | AI | 需要基于用户角色的语境理解 |
+| 飞书 KB 读取与画像生成 | AI（调用飞书 MCP 工具） | 需要理解文档内容推断领域 |
+| 群聊信号提取 | AI（调用飞书 MCP 工具） | 需要自然语言理解提取话题 |
+| 画像增量更新与衰减 | AI | 需要按 signal_rules 参数执行权重计算 |
 | 结构化 payload 生成 | AI | 内容是动态的，需要 AI 生成当天的结构化数据 |
 | HTML 渲染 | 脚本（`render_daily.py`） | 页面结构、样式和反馈 JS 需要稳定复用，避免模型每次重写整页 |
 | 兴趣漂移检测 | AI | 需要对比 profile 和行为数据的差异 |
