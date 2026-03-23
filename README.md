@@ -8,6 +8,20 @@
 - Python 3
 - 飞书 MCP 插件（任意版本均可，skill 会自动适配工具名）
 
+### 飞书权限
+
+飞书 MCP 插件需要以下权限。不同插件封装方式不同，有些已内置，有些需要在[飞书开放平台](https://open.feishu.cn)手动开启：
+
+| 权限 | 权限标识 | 用途 | 缺失影响 |
+|---|---|---|---|
+| 知识库节点列表 | `wiki:wiki:readonly` | 初始化画像 | 无法自动生成画像 |
+| 读取文档内容 | `docx:document:readonly` | 初始化画像 | 同上 |
+| 读取群聊消息 | `im:message:readonly` | 每日信号采集 | 画像不会自动更新 |
+| 读取群聊信息 | `im:chat:readonly` | 验证群聊 ID | 无法验证群是否存在 |
+| 用户信息（可选） | `contact:user.base:readonly` | 识别发言人 | 不影响核心功能 |
+
+> **权限不全也能用**：缺少知识库权限 → 手动创建画像文件即可。缺少群聊权限 → 以 degraded 模式运行（不读群聊，仅靠搜索）。skill 会告诉你具体是哪个权限缺失。
+
 ## 第一次使用
 
 ### 1. 安装 skill
@@ -111,13 +125,27 @@ http://<你的局域网 IP>:17890/daily/2026-03-23.html
 
 ### 初始化时提示"找不到飞书工具"
 
-Skill 会自动扫描包含 `feishu`/`lark`/`飞书` 关键词的 MCP 工具。如果一个都没找到，说明飞书插件未安装。可以：
-- 安装任意飞书 MCP 插件
-- 或跳过初始化，手动创建 `config/dept-profile.yaml`（参考 `reference/dept-profile-template.yaml`）
+飞书插件未安装。安装任意飞书 MCP 插件即可，或手动创建 `config/dept-profile.yaml`。
+
+### 初始化时提示权限不足 / 403
+
+知识库或文档读取权限未开启。去[飞书开放平台](https://open.feishu.cn) → 应用权限 → 开启 `wiki:wiki:readonly` 和 `docx:document:readonly`。
+
+### 群聊消息读取失败
+
+- `im:message:readonly` 权限未开启 → 在飞书开放平台开启
+- 群聊 ID 错误 → 在飞书群设置中查看群链接，重新 `/ai-daily set-group <正确ID>`
+
+### 日报跑完了但提示有步骤被跳过
+
+这是正常的降级模式。AI 会在输出中标注 `⚠️ [步骤名] 未完成 — [原因] — [建议操作]`。常见原因：
+- 群聊权限缺失 → 画像未更新但日报仍可生成
+- 搜索结果不足 → 日报条数可能少于预期
+- 渲染脚本报错 → 检查 JSON 格式
 
 ### 日报内容太旧，不是今天的新闻
 
-Skill 要求 ≥80% 内容来自今天/昨天。如果仍然偏旧，检查搜索查询是否带了时间限定词。可以用 `/ai-daily refresh-profile` 刷新画像后重试。
+Skill 要求 ≥80% 内容来自今天/昨天。如果仍然偏旧，可以 `/ai-daily refresh-profile` 刷新画像后重试。
 
 ### 服务启动失败
 
