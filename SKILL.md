@@ -1,9 +1,9 @@
 ---
 name: ai_daily
 description: >
-  AI 资讯日报生成技能。根据用户兴趣配置，从互联网多渠道抓取最新 AI 资讯，
-  经 AI 加工后生成一份带反馈采集和 AI 工具集成的静态 HTML 日报页面，
-  并启动本地 HTTP 服务自动收集用户阅读反馈。
+  企业部门日报生成技能。通过飞书知识库和群聊信号自动构建部门画像，
+  从互联网多渠道抓取与部门相关的资讯，经 AI 加工后生成 HTML 日报页面，
+  并启动本地 HTTP 服务自动收集阅读反馈。
 metadata:
   openclaw:
     os: ["darwin", "linux"]
@@ -12,17 +12,32 @@ metadata:
     skillKey: ai_daily
 ---
 
-# AI 资讯日报生成
+# 部门资讯日报生成
 
-你是一个 AI 资讯编辑，负责为用户生成个性化的 AI 领域日报。你需要完成：抓取真实资讯 → AI 加工 → 生成 HTML → 启动反馈服务 → 打开页面。
+你是一个资讯编辑，负责为企业部门生成个性化日报。部门画像由飞书知识库初始化、群聊信号每日更新。你需要完成：读取画像 → 采集群聊信号 → 搜索资讯 → AI 加工 → 生成 HTML → 启动反馈服务 → 打开页面。
 
 ## 触发条件
 
-当用户使用 `/ai-daily` 命令或要求"生成 AI 日报"、"今日 AI 资讯"等类似请求时触发。
+当用户使用 `/ai-daily` 命令时触发。
 
 用户可通过参数指定：
-- 关注方向：如 `/ai-daily AI Agent`，重点抓取该方向
+- 关注方向：如 `/ai-daily 竞品动态`，重点抓取该方向
 - 指定日期：如 `/ai-daily 2026-03-20`
+
+### 控制命令
+
+| 命令 | 作用 | 修改字段 | 状态迁移 |
+|---|---|---|---|
+| `/ai-daily set-group <chat_id>` | 设置飞书群聊 ID | `department.feishu_group_id` | `awaiting_group_id` → `active` |
+| `/ai-daily set-domain <primary_domain>` | 设置主领域 | `department.primary_domain` | 无状态变化 |
+| `/ai-daily set-context <freeform_text>` | 设置自由文本上下文 | `department.freeform_context` | 无状态变化 |
+| `/ai-daily refresh-profile` | 重新读取飞书 KB 重建静态画像 | 重建静态部分，保留动态数据 | 按 `feishu_group_id` 是否存在决定 |
+
+`set-domain` 的值必须来自受控词汇表：`ai`, `product`, `engineering`, `marketing`, `finance`, `legal`, `operations`, `sales`, `research`, `hr`, `data`, `design`, `growth`, `security`, `strategy`, `customer_success`, `bd`, `general`。
+
+`refresh-profile` 的字段保留语义：
+- **重建**：`department.name`, `primary_domain`, `secondary_domains`, `freeform_context`, `industry`, `sources.*`, `kb_init.*`
+- **保留**：`department.feishu_group_id`, `tracking.*`, `topic_weights`（只合并新话题）, `history`, `signal_rules`
 
 ## 执行流程
 
