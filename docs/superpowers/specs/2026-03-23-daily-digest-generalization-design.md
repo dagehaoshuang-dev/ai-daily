@@ -86,11 +86,21 @@ Render HTML → start feedback server
 Extract today's summary → append to profile history
 ```
 
-**Path C — Set Group ID (`/ai-daily set-group <chat_id>`)**
-```
-Write feishu_group_id to dept-profile.yaml
-Transition state: awaiting_group_id → active
-```
+**Path C — Control Commands**
+
+All commands patch `dept-profile.yaml` directly and may trigger a state transition:
+
+| Command | Fields Modified | State Transition | Error Behavior |
+|---|---|---|---|
+| `/ai-daily set-group <chat_id>` | `department.feishu_group_id` | `awaiting_group_id` → `active` | Error if `chat_id` empty or invalid format |
+| `/ai-daily set-domain <primary_domain>` | `department.primary_domain` | any → same (no state change) | Error if value not in controlled vocab; suggest closest match |
+| `/ai-daily set-context <freeform_text>` | `department.freeform_context` | any → same | None; accepts any string |
+| `/ai-daily refresh-profile` | Rebuilds full `dept-profile.yaml` from KB | any → `awaiting_group_id` | Preserves `feishu_group_id` if already set → transitions to `active` immediately |
+
+Notes:
+- `set-domain` and `set-context` are valid in any state, including `degraded`
+- `refresh-profile` re-runs Path A; existing `feishu_group_id` is carried over so users don't need to re-run `set-group`
+- `secondary_domains` are not directly settable via command; they are inferred during KB init or `refresh-profile`, and can be manually edited in `dept-profile.yaml`
 
 ---
 
@@ -110,9 +120,9 @@ status: active   # uninitialized | awaiting_group_id | active | degraded
 department:
   name: "产品部"
   primary_domain: "product"       # Single primary domain from controlled vocab
-  secondary_domains: ["saas"]     # Additional domain tags (freeform allowed)
-  freeform_context: "B2B SaaS 企业协���工具，专注日本市场"  # Free text for AI context
-  industry: "B2B SaaS"
+  secondary_domains: ["growth", "customer_success"]  # Use domain vocab tags, not industry/business model labels
+  freeform_context: "B2B SaaS 协同办公工具，专注日本市场"  # Free text for AI context
+  industry: "B2B SaaS"            # Industry/business model label (separate from domain)
   feishu_group_id: ""             # Set via /ai-daily set-group <chat_id>
 
 # KB init configuration (defaults; override here to adjust)
@@ -151,6 +161,20 @@ topic_weights:
 sources:
   direct: []           # URLs fetched directly each run
   search_queries: []   # Seed queries; AI augments each run
+
+# Signal processing parameters (all values are defaults; override here to tune)
+signal_rules:
+  topic_boost_threshold: 2       # Min messages for topic boost
+  new_topic_threshold: 3         # Min messages to add a new topic entry
+  entity_threshold: 2            # Min messages to add/update a tracking entity
+  daily_boost: 0.2               # Weight added per day with signal
+  daily_decay: 0.9               # Weight multiplier per day without signal
+  weight_floor: 0.1              # Minimum weight before entry is eligible for pruning
+  prune_days: 30                 # Days since last_signal before pruning is considered
+  prune_score_threshold: 0.3     # Score below which old entries are pruned
+  query_entity_score_threshold: 0.5  # Min score for entity to generate a search query
+  max_messages_per_run: 1000     # Pagination hard cap
+  compress_after_messages: 200   # Summarize before AI analysis if above this count
 
 # Rolling 7-day history (calendar days; last-write-wins if run twice same day)
 history:
@@ -196,7 +220,16 @@ history:
 - Prune tracking entries where `last_signal > 30 days` AND `score < 0.3`
 - Write incremental changes back to `dept-profile.yaml`
 
-**On MCP failure**: set `status: degraded`, add to `digest_meta.warnings[]`, continue to Step 2
+**On Step 1 failure classification**:
+
+| Failure Type | Condition | State Transition |
+|---|---|---|
+| Transport / auth failure | MCP call returns error, timeout, or permission denied | → `degraded` |
+| Business-empty | Call succeeds but 0 messages returned (quiet day) | stays `active`; apply decay only |
+| Partial fetch | At least one page succeeds but pagination incomplete | stays `active`; process available messages; add warning |
+| Full success | All pages fetched without error, ≥1 message processed | stays / returns to `active` |
+
+**Recovery from `degraded`**: State returns to `active` automatically when Step 1 completes with a Full success or Partial fetch result on a subsequent run. Transport/auth failures do not recover automatically — they require the underlying MCP issue to be resolved.
 
 ### Step 2 (MODIFIED): Build Search Strategy
 
@@ -243,14 +276,17 @@ The existing `data/feedback/` HTML behavior data is **preserved** as a secondary
 | Failure Scenario | State Transition | Behavior |
 |---|---|---|
 | Group chat empty / no qualifying signals | stays `active` | Skip weight update, apply decay only, continue |
-| `feishu_im_user_get_messages` fails | → `degraded` | Add to `digest_meta.warnings[]`; use current profile |
+| `feishu_im_user_get_messages` transport/auth fails | → `degraded` | Add to `digest_meta.warnings[]`; use current profile; manual recovery required |
+| `feishu_im_user_get_messages` returns 0 messages | stays `active` | Apply decay only; no warning needed |
+| Partial fetch (pagination incomplete) | stays `active` | Process available messages; add warning to `digest_meta.warnings[]` |
+| Step 1 Full success after `degraded` | → `active` | Automatic recovery |
 | `feishu_group_id` not set | stays `awaiting_group_id` | Prompt user; exit without generating digest |
 | KB read fails entirely (init) | stays `uninitialized` | Exit with error; prompt user to check MCP |
 | Individual KB pages fail (init) | — | Skip those pages; log in `kb_init.init_coverage_note` |
 | KB has <3 readable pages | → `awaiting_group_id` | Generate minimal profile with `primary_domain: general`; prompt to confirm |
 | `primary_domain` empty after init | → `awaiting_group_id` | Prompt user to confirm domain via `/ai-daily set-domain <domain>` |
 | Legacy `config/profile.yaml` found | → `awaiting_group_id` | Migrate; rename old file `.bak`; prompt for group ID |
-| MCP recovers after `degraded` | → `active` | Automatic on next successful Step 1 |
+| MCP recovers after `degraded` | → `active` | On next Full success or Partial fetch in Step 1 |
 
 ---
 
