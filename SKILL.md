@@ -179,6 +179,7 @@ AI 作为"总编辑"，从采集到的全部资讯中做以下决策：
 1. AI 先生成结构化 payload，写入 `output/daily/{date}.json`
 2. 调用 `scripts/render_daily.py output/daily/{date}.json`
 3. 由脚本输出 `output/daily/{date}.html`
+4. 生成后调用 `scripts/open_daily.py {date}` 打开页面；若反馈服务已启动则优先打开本机 HTTP 地址，否则回退到本地文件
 
 只有在渲染脚本缺失或损坏时，才退回到直接生成完整 HTML。
 
@@ -368,10 +369,10 @@ function onLeave() {
 
 ### 第六步：启动反馈服务
 
-1. 使用现有的 `scripts/feedback_server.py` 启动本地 HTTP 服务（serve `output/` 目录 + `POST /api/feedback` 写入 `data/feedback/{date}.json`，端口默认 17890，冲突自动 +1，超时 2 小时自动退出）
+1. 使用现有的 `scripts/feedback_server.py` 启动 HTTP 服务（serve `output/` 目录 + `POST /api/feedback` 写入 `data/feedback/{date}.json`，默认 `server.host: 0.0.0.0` 允许局域网访问，端口默认 17890，冲突自动 +1，超时 2 小时自动退出）
 2. 启动服务：`python3 scripts/feedback_server.py`
 3. 等待 `data/.server_port` 写入，读取端口号
-4. 用浏览器打开 `http://localhost:{port}/daily/{date}.html`
+4. 当前机器使用 `python3 scripts/open_daily.py {date} --mode http` 打开页面；局域网其他用户使用启动日志中打印出的 `http://<局域网IP>:<port>/daily/{date}.html`
 
 ### 第七步：输出结果
 
@@ -395,6 +396,7 @@ function onLeave() {
 | 文件 | 用途 | 调用方式 |
 |------|------|---------|
 | `scripts/render_daily.py` | 将 `output/daily/{date}.json` 稳定渲染为 HTML | `python3 scripts/render_daily.py output/daily/{date}.json` |
+| `scripts/open_daily.py` | 打开已生成的日报页面，优先使用本地 HTTP 服务地址 | `python3 scripts/open_daily.py {date}` |
 | `scripts/feedback_server.py` | HTTP 静态服务 + 反馈接收，超时自动退出 | 后台运行 |
 
 注意：**采集、加工、筛选、摘要、行动建议由 AI 完成；HTML 结构输出优先由渲染脚本完成。** 脚本负责稳定渲染和反馈收集服务。

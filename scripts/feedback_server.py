@@ -18,6 +18,7 @@ from functools import partial
 
 DEFAULT_PORT = 17890
 DEFAULT_TIMEOUT_HOURS = 2
+DEFAULT_HOST = "0.0.0.0"
 
 
 def resolve_root_dir():
@@ -68,6 +69,31 @@ def normalize_feedback_payload(body):
         return None, "event_batch"
 
     return None, "invalid"
+
+
+def get_local_ip_addresses():
+    """返回可用于局域网访问的本机 IPv4 地址。"""
+    ips = set()
+    try:
+        hostname = socket.gethostname()
+        for info in socket.getaddrinfo(hostname, None, family=socket.AF_INET):
+            ip = info[4][0]
+            if not ip.startswith("127."):
+                ips.add(ip)
+    except socket.gaierror:
+        pass
+
+    # 通过 UDP 套接字获取默认出口地址，通常更接近实际可访问网卡
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("8.8.8.8", 80))
+            ip = s.getsockname()[0]
+            if ip and not ip.startswith("127."):
+                ips.add(ip)
+    except OSError:
+        pass
+
+    return sorted(ips)
 
 
 class FeedbackHandler(http.server.SimpleHTTPRequestHandler):
@@ -141,14 +167,19 @@ class FeedbackHandler(http.server.SimpleHTTPRequestHandler):
         pass  # 静默
 
 
-def find_port(base, max_try=10):
-    """从 base 开始找一个可用端口"""
+def find_port(base, host, max_try=10):
+    """从 base 开始找一个可绑定到 host 的可用端口。"""
+    last_error = None
     for i in range(max_try):
         port = base + i
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            if s.connect_ex(("127.0.0.1", port)) != 0:
-                return port
-    return None
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            try:
+                s.bind((host, port))
+                return port, None
+            except OSError as exc:
+                last_error = exc
+    return None, last_error
 
 
 def load_server_config():
@@ -172,6 +203,8 @@ def load_server_config():
                         cfg["timeout_hours"] = float(line.split(":")[1].strip())
                     except ValueError:
                         pass
+                elif line.startswith("host:"):
+                    cfg["host"] = line.split(":", 1)[1].strip().strip("'\"")
                 elif line.startswith("port:"):
                     try:
                         cfg["port"] = int(line.split(":")[1].strip())
@@ -183,12 +216,32 @@ def load_server_config():
 
 def main():
     cfg = load_server_config()
+    bind_host = cfg.get("host", DEFAULT_HOST)
     port_base = cfg.get("port", DEFAULT_PORT)
     timeout_hours = cfg.get("timeout_hours", DEFAULT_TIMEOUT_HOURS)
 
-    port = find_port(port_base)
+    port, port_error = find_port(port_base, bind_host)
     if not port:
-        print(f"ERROR: 端口 {port_base}-{port_base + 9} 全部被占用", file=sys.stderr)
+        if isinstance(port_error, PermissionError):
+            print(
+                "ERROR: 当前环境不允许监听本地端口，反馈服务未启动。",
+                file=sys.stderr,
+            )
+            print(
+                f"       尝试绑定地址 {bind_host}，端口范围 {port_base}-{port_base + 9} 时被权限策略阻止。",
+                file=sys.stderr,
+            )
+            print(
+                "       这通常不是端口占用，而是沙箱、系统策略或权限限制导致。",
+                file=sys.stderr,
+            )
+        else:
+            print(
+                f"ERROR: 地址 {bind_host} 的端口 {port_base}-{port_base + 9} 全部不可用。",
+                file=sys.stderr,
+            )
+            if port_error is not None:
+                print(f"       最后一次错误: {port_error}", file=sys.stderr)
         sys.exit(1)
 
     # 写入端口文件
@@ -205,9 +258,17 @@ def main():
 
     # 启动服务
     handler = partial(FeedbackHandler, directory=str(OUTPUT_DIR))
-    server = http.server.HTTPServer(("127.0.0.1", port), handler)
+    server = http.server.HTTPServer((bind_host, port), handler)
 
-    print(f"✅ AI 日报服务已启动: http://localhost:{port}")
+    print("✅ AI 日报服务已启动")
+    print(f"   监听地址: {bind_host}:{port}")
+    print(f"   本机访问: http://localhost:{port}")
+    if bind_host in {"0.0.0.0", ""}:
+        lan_ips = get_local_ip_addresses()
+        if lan_ips:
+            print("   局域网访问:")
+            for ip in lan_ips:
+                print(f"   - http://{ip}:{port}")
     print(f"   静态目录: {OUTPUT_DIR}")
     print(f"   反馈写入: {FEEDBACK_DIR}")
     print(f"   {timeout_hours} 小时后自动停止")
