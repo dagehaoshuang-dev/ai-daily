@@ -95,7 +95,7 @@ All commands patch `dept-profile.yaml` directly and may trigger a state transiti
 | `/ai-daily set-group <chat_id>` | `department.feishu_group_id` | `awaiting_group_id` → `active` | Error if `chat_id` empty or invalid format |
 | `/ai-daily set-domain <primary_domain>` | `department.primary_domain` | any → same (no state change) | Error if value not in controlled vocab; suggest closest match |
 | `/ai-daily set-context <freeform_text>` | `department.freeform_context` | any → same | None; accepts any string |
-| `/ai-daily refresh-profile` | Rebuilds full `dept-profile.yaml` from KB | any → `awaiting_group_id` | Preserves `feishu_group_id` if already set → transitions to `active` immediately |
+| `/ai-daily refresh-profile` | Rebuilds full `dept-profile.yaml` from KB | `feishu_group_id` set → `active`; not set → `awaiting_group_id` | Preserves `feishu_group_id` if already set |
 
 Notes:
 - `set-domain` and `set-context` are valid in any state, including `degraded`
@@ -147,11 +147,8 @@ tracking:
   technologies: []
   people: []
 
-# Topic weights (auto-adjusted daily)
-# Decay: weight *= 0.9 per day without signal; floor 0.1
-# Boost: weight = min(1.0, weight + 0.2) per day with signal
-# Signal threshold: ≥2 messages mentioning topic (no reaction data → this is the only threshold)
-# New topic entry: ≥3 mentions → initial weight 0.4
+# Topic weights (auto-adjusted daily; all parameters from signal_rules)
+# See signal_rules section for current threshold values
 topic_weights:
   - topic: "竞品动态"
     weight: 0.9
@@ -164,15 +161,24 @@ sources:
 
 # Signal processing parameters (all values are defaults; override here to tune)
 signal_rules:
+  # --- Signal extraction ---
   topic_boost_threshold: 2       # Min messages for topic boost
   new_topic_threshold: 3         # Min messages to add a new topic entry
   entity_threshold: 2            # Min messages to add/update a tracking entity
+  # --- Weight dynamics ---
   daily_boost: 0.2               # Weight added per day with signal
   daily_decay: 0.9               # Weight multiplier per day without signal
-  weight_floor: 0.1              # Minimum weight before entry is eligible for pruning
+  weight_floor: 0.1              # Minimum weight (below this, eligible for pruning)
+  new_topic_initial_weight: 0.4  # Starting weight for newly discovered topics
+  # --- Pruning ---
   prune_days: 30                 # Days since last_signal before pruning is considered
   prune_score_threshold: 0.3     # Score below which old entries are pruned
-  query_entity_score_threshold: 0.5  # Min score for entity to generate a search query
+  prune_require_zero_7d: true    # Also require signal_count_7d == 0 to prune
+  # --- Search budget allocation ---
+  high_weight_query_threshold: 0.6   # Topics above this get 2 search queries
+  low_weight_query_threshold: 0.3    # Topics between low and high get 1 query; below = skipped
+  query_entity_score_threshold: 0.5  # Min tracking entity score to generate a search query
+  # --- Message fetching ---
   max_messages_per_run: 1000     # Pagination hard cap
   compress_after_messages: 200   # Summarize before AI analysis if above this count
 
@@ -209,15 +215,15 @@ history:
 
 **Message fetching**: Paginate `feishu_im_user_get_messages` from UTC+8 00:00 today to current time. Continue paginating until either the start of day is reached or 1000 messages total are fetched, whichever comes first. Summarize/compress before analysis if >200 messages retrieved.
 
-**Signal extraction rules**:
-- **Topic boost**: topic mentioned in ≥2 messages → `weight += 0.2` (capped at 1.0)
-- **Entity signal**: company/product/market name in ≥2 messages → add/update `tracking` entry
-- **New topic**: not in profile, mentioned ≥3 times → add with initial weight 0.4
+**Signal extraction rules** (all thresholds from `signal_rules.*`):
+- **Topic boost**: topic mentioned in ≥ `topic_boost_threshold` messages → `weight += daily_boost` (capped at 1.0)
+- **Entity signal**: company/product/market name in ≥ `entity_threshold` messages → add/update `tracking` entry
+- **New topic**: not in profile, mentioned ≥ `new_topic_threshold` times → add with `new_topic_initial_weight`
 - **Noise filter**: single mentions are ignored
 
 **After extraction**:
-- Apply decay to all topics not signaled today: `weight *= 0.9` (floor 0.1)
-- Prune tracking entries where `last_signal > 30 days` AND `score < 0.3`
+- Apply decay to all topics not signaled today: `weight *= daily_decay` (floor `weight_floor`)
+- Prune tracking entries where `last_signal` > `prune_days` ago AND `score` < `prune_score_threshold` AND `signal_count_7d == 0` (if `prune_require_zero_7d` is true)
 - Write incremental changes back to `dept-profile.yaml`
 
 **On Step 1 failure classification**:
@@ -235,8 +241,8 @@ history:
 
 Driven by `dept-profile`:
 - `primary_domain` + `secondary_domains` + `freeform_context` → determines direct-fetch sources and base queries
-- `tracking.competitors/products` → targeted search queries (one per entity with `score > 0.5`)
-- `topic_weights` → topics with weight > 0.6 get 2 queries; 0.3–0.6 get 1; below 0.3 are skipped
+- `tracking.competitors/products` → targeted search queries (one per entity with score ≥ `signal_rules.query_entity_score_threshold`)
+- `topic_weights` → topics with weight ≥ `signal_rules.high_weight_query_threshold` get 2 queries; between `low_weight_query_threshold` and `high_weight_query_threshold` get 1; below `low_weight_query_threshold` are skipped
 - `sources.direct` → fetched directly each run
 - `sources.search_queries` → used as seed queries; AI may augment
 
@@ -275,18 +281,16 @@ The existing `data/feedback/` HTML behavior data is **preserved** as a secondary
 
 | Failure Scenario | State Transition | Behavior |
 |---|---|---|
-| Group chat empty / no qualifying signals | stays `active` | Skip weight update, apply decay only, continue |
-| `feishu_im_user_get_messages` transport/auth fails | → `degraded` | Add to `digest_meta.warnings[]`; use current profile; manual recovery required |
-| `feishu_im_user_get_messages` returns 0 messages | stays `active` | Apply decay only; no warning needed |
+| Group chat returns 0 messages (quiet day) | stays `active` | Apply decay only; no warning needed |
+| `feishu_im_user_get_messages` transport/auth fails | → `degraded` | Add to `digest_meta.warnings[]`; use current profile; manual MCP fix required |
 | Partial fetch (pagination incomplete) | stays `active` | Process available messages; add warning to `digest_meta.warnings[]` |
-| Step 1 Full success after `degraded` | → `active` | Automatic recovery |
+| Step 1 Full success while in `degraded` | → `active` | Automatic recovery |
 | `feishu_group_id` not set | stays `awaiting_group_id` | Prompt user; exit without generating digest |
 | KB read fails entirely (init) | stays `uninitialized` | Exit with error; prompt user to check MCP |
 | Individual KB pages fail (init) | — | Skip those pages; log in `kb_init.init_coverage_note` |
 | KB has <3 readable pages | → `awaiting_group_id` | Generate minimal profile with `primary_domain: general`; prompt to confirm |
 | `primary_domain` empty after init | → `awaiting_group_id` | Prompt user to confirm domain via `/ai-daily set-domain <domain>` |
 | Legacy `config/profile.yaml` found | → `awaiting_group_id` | Migrate; rename old file `.bak`; prompt for group ID |
-| MCP recovers after `degraded` | → `active` | On next Full success or Partial fetch in Step 1 |
 
 ---
 
