@@ -115,18 +115,32 @@ AI 分析读取到的文档内容，推断：
 
 **从 `degraded` 恢复**：当后续运行中第一步以完整成功或部分获取完成时，自动恢复为 `active`。
 
-### 第二步：采集 — AI 驱动的智能搜索
+### 第二步：采集 — 画像驱动的智能搜索
 
-AI 根据第一步制定的编辑策略，使用搜索工具并行抓取。
+AI 根据 `config/dept-profile.yaml` 构建搜索策略，使用搜索工具并行抓取。
 
-**AI 自主决定搜索什么、搜多少、从哪里搜。** 以下是指导原则而非固定模板：
+**注意**：如果当前状态为 `degraded`（第一步被跳过），在 `digest_meta.warnings[]` 中添加 `PROFILE_DEGRADED` warning（每次 degraded 状态下运行都要添加，不仅是首次转换时）。
 
+**搜索策略构建**（由画像驱动）：
+- `primary_domain` + `secondary_domains` + `freeform_context` → 决定直抓页面来源和基础查询词
+- `tracking.competitors/products` → 针对性搜索（每个 `score` ≥ `signal_rules.query_entity_score_threshold` 的实体生成一条查询）
+- `topic_weights` → 权重 ≥ `signal_rules.high_weight_query_threshold` 的话题分配 2 条查询；介于 `low_weight_query_threshold` 和 `high_weight_query_threshold` 之间的分配 1 条；低于 `low_weight_query_threshold` 的跳过
+- `sources.direct` → 每次运行直接抓取
+- `sources.search_queries` → 作为种子查询词使用；AI 可根据时事补充
+
+**AI 自主决定搜索什么、搜多少、从哪里搜。** 以下是指导原则：
 - 并行发起至少 4 条搜索，覆盖中英文
-- 搜索词应结合用户兴趣动态构造（不是固定关键词）
-  - 比如用户反馈中 #Agent 得分最高，就加大 Agent 相关搜索力度
-  - 比如用户最近取消了 #论文 标签，就减少论文方向的搜索
+- 搜索词结合画像中的实体和话题动态构造
+- 群聊信号中权重高的话题加大搜索力度
 - 抓取 1-2 个新闻聚合页补充细节（WebFetch）
-- 如果某个方向搜索结果不够丰富，AI 应主动调整关键词重新搜索
+- 如果某个方向搜索结果不够丰富，主动调整关键词重新搜索
+
+**读取历史反馈**：同时扫描 `data/feedback/` 目录下最近 7 天的 JSON 文件作为次要信号（结构参见 `reference/feedback_schema.json`）。如果不存在或无数据，视为"暂无历史反馈"，不要报错。
+
+信号优先级：
+1. 飞书群聊信号（主要 — 反映团队行为）
+2. HTML 页面反馈（次要 — 个人阅读行为）
+3. `dept-profile.yaml` 静态配置（基线）
 
 ### 第三步：筛选与加工 — AI 编辑判断
 
