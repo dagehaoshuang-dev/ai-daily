@@ -69,8 +69,25 @@ metadata:
 AI 分析读取到的文档内容，推断：
 - 部门名称、主领域（`primary_domain`）、次要领域（`secondary_domains`）
 - 行业描述（`industry`）、自由文本上下文（`freeform_context`）
-- 推荐数据源（`sources.direct`、`sources.search_queries`）
 - 初始话题权重（`topic_weights`）和跟踪实体（`tracking`）
+
+#### 来源探索（初始化专属步骤）
+
+在推断出部门领域后，AI **必须主动搜索并验证**适合该部门的信息来源，写入 `sources.direct` 和 `sources.search_queries`。不能凭空猜测或只给泛用来源。
+
+**执行方式**：
+1. 根据部门的 `primary_domain` + `industry` + `freeform_context`，搜索该领域的权威信息来源（如 "fintech industry news sources"、"B2B SaaS competitive intelligence sources"）
+2. 识别以下三类来源并分别处理：
+
+| 来源类型 | 写入字段 | 示例 |
+|---|---|---|
+| **一手来源页面**（官方博客/changelog/release 页面、监管机构公告页、行业协会发布页） | `sources.direct` | 竞品官方博客 URL、行业监管公告页 URL |
+| **结构化搜索词**（用于 WebSearch，覆盖行业动态/竞品/政策/技术趋势） | `sources.search_queries` | `"fintech regulation 2026"`、`"[竞品名] 最新发布"` |
+| **聚合/社区页面**（行业论坛、Reddit 子版、HN、专业社区） | `sources.direct`（标注为社区源） | `reddit.com/r/fintech`、`news.ycombinator.com` |
+
+3. 对 `sources.direct` 中的每个 URL，尝试一次 WebFetch 验证可访问性。不可访问的来源标注在 `kb_init.init_coverage_note` 中但仍保留（可能是临时网络问题）
+4. `sources.search_queries` 至少包含 5 条种子查询词，覆盖：部门核心业务方向、主要竞品/跟踪实体、行业政策/法规、技术趋势
+5. 将来源探索结果展示给用户确认，告知"以下是为贵部门推荐的信息来源，后续每日日报将从这些渠道采集。如需调整可手动编辑 `config/dept-profile.yaml` 的 `sources` 字段"
 
 生成 `config/dept-profile.yaml`（参考 `reference/dept-profile-template.yaml`），状态设为 `awaiting_group_id`。
 
