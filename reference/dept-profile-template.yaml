@@ -1,0 +1,78 @@
+# Department Profile Template
+# This is a blank template for config/dept-profile.yaml
+# Use this as a starting point for department-driven AI digest configuration
+# Fill in values according to your department's specific needs
+
+schema_version: 1
+status: uninitialized   # uninitialized | awaiting_group_id | active | degraded
+
+# Static section (generated at init, rarely changes)
+department:
+  name: ""
+  # Controlled vocabulary for primary_domain:
+  # ai, product, engineering, marketing, finance, legal, operations, sales,
+  # research, hr, data, design, growth, security, strategy, customer_success, bd, general
+  primary_domain: ""
+  secondary_domains: []      # Use domain vocab tags, not industry/business model labels
+  freeform_context: ""       # Free text for AI context
+  industry: ""               # Industry/business model label (separate from domain)
+  feishu_group_id: ""        # Set via /ai-daily set-group <chat_id>
+
+# KB init configuration (defaults; override here to adjust)
+kb_init:
+  max_depth: 2
+  max_pages: 20
+  max_page_size_kb: 50
+  last_init: null
+  init_coverage_note: ""
+
+# Dynamic tracking entities
+# Pruned when: last_signal > prune_days ago AND score < prune_score_threshold AND signal_count_7d == 0
+tracking:
+  competitors: []    # Each entry: {name, score, first_seen, last_signal, signal_count_7d}
+  products: []
+  markets: []
+  technologies: []
+  people: []
+
+# Topic weights (auto-adjusted daily; all parameters from signal_rules)
+topic_weights: []
+# Each entry: {topic, weight, last_signal}
+
+# Recommended sources (AI-inferred from domain during init; manually overridable)
+sources:
+  direct: []           # URLs fetched directly each run
+  search_queries: []   # Seed queries; AI augments each run
+
+# Signal processing parameters (all values are defaults; override here to tune)
+signal_rules:
+  # --- Signal extraction ---
+  topic_boost_threshold: 2
+  new_topic_threshold: 3
+  entity_threshold: 2
+  # --- Weight dynamics ---
+  daily_boost: 0.2
+  daily_decay: 0.9
+  weight_floor: 0.1
+  new_topic_initial_weight: 0.4
+  # --- Pruning ---
+  prune_days: 30
+  prune_score_threshold: 0.3
+  prune_require_zero_7d: true
+  # --- Search budget allocation ---
+  high_weight_query_threshold: 0.6
+  low_weight_query_threshold: 0.3
+  query_entity_score_threshold: 0.5
+  # --- Message fetching ---
+  max_messages_per_run: 1000
+  compress_after_messages: 200
+
+# Rolling 7-day history (calendar days; last-write-wins if run twice same day)
+history: []
+# Each entry: {date, top_topics, group_signals}
+
+# Runtime metadata (auto-updated each run; do not edit manually)
+runtime:
+  last_signal_update: null
+  last_digest_run: null
+  last_step1_result: null    # full_success | partial_fetch | business_empty | transport_auth_failure
