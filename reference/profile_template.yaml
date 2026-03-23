@@ -1,0 +1,81 @@
+# AI 日报 — 用户兴趣配置模板
+# 首次使用 /ai-daily 时根据用户选择自动生成
+# 用户可随时手动编辑，下次运行即生效
+
+# ━━ 角色 ━━
+# 影响 AI 摘要的解读角度和行动建议的方向
+# 可选值：技术研发 | 产品经理 | 技术管理 | AI 研究员 | 市场/运营 | 综合关注
+role: "技术研发"
+
+# 角色补充描述（可选，帮助 AI 更精准解读）
+# 示例："主要做 AI Agent 开发，技术栈是 Python + LangChain"
+role_context: ""
+
+# ━━ 关注话题 ━━
+# priority: high（必选）| medium（有则采）| low（偶尔看看）
+topics:
+  - name: "大模型"
+    priority: high
+    keywords:
+      - "LLM"
+      - "GPT"
+      - "Claude"
+      - "Gemini"
+      - "Llama"
+      - "大语言模型"
+      - "foundation model"
+
+  - name: "AI Agent"
+    priority: high
+    keywords:
+      - "AI Agent"
+      - "Agent Framework"
+      - "LangChain"
+      - "LangGraph"
+      - "CrewAI"
+      - "AutoGen"
+      - "智能体"
+
+  - name: "开源"
+    priority: medium
+    keywords:
+      - "开源模型"
+      - "开源框架"
+      - "Hugging Face"
+      - "open source LLM"
+      - "GitHub Trending AI"
+
+  - name: "RAG"
+    priority: medium
+    keywords:
+      - "RAG"
+      - "检索增强生成"
+      - "向量数据库"
+      - "Embedding"
+
+  - name: "AI 编程"
+    priority: medium
+    keywords:
+      - "AI coding"
+      - "Copilot"
+      - "Claude Code"
+      - "Cursor"
+      - "代码生成"
+
+# 不感兴趣的话题（采集时排除）
+exclude_topics:
+  - "加密货币"
+  - "NFT"
+
+# ━━ 日报偏好 ━━
+daily:
+  max_items: 15              # 速览:10 | 标准:15 | 深度:20
+  summary_style: "detailed"  # brief | detailed | deep
+  include_actions: true      # 是否生成行动建议
+  include_trends: true       # 是否生成趋势雷达
+  language: "zh-CN"          # 输出语言
+
+# ━━ 反馈服务 ━━
+server:
+  timeout_hours: 2           # 自动停止时间（小时）
+  port: 17890                # 起始端口（冲突自动 +1）
