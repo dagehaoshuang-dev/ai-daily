@@ -13,6 +13,7 @@ import sys
 import socket
 import time
 import threading
+import atexit
 from pathlib import Path
 from functools import partial
 
@@ -186,6 +187,16 @@ def main():
     port_base = cfg.get("port", DEFAULT_PORT)
     timeout_hours = cfg.get("timeout_hours", DEFAULT_TIMEOUT_HOURS)
 
+    # 清理残留的端口文件（上次非正常退出留下的）
+    if PORT_FILE.exists():
+        try:
+            old_port = int(PORT_FILE.read_text().strip())
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                if s.connect_ex(("127.0.0.1", old_port)) != 0:
+                    PORT_FILE.unlink(missing_ok=True)
+        except (ValueError, OSError):
+            PORT_FILE.unlink(missing_ok=True)
+
     port = find_port(port_base)
     if not port:
         print(f"ERROR: 端口 {port_base}-{port_base + 9} 全部被占用", file=sys.stderr)
@@ -194,6 +205,9 @@ def main():
     # 写入端口文件
     PORT_FILE.parent.mkdir(parents=True, exist_ok=True)
     PORT_FILE.write_text(str(port))
+
+    # 确保任何退出方式都清理端口文件
+    atexit.register(lambda: PORT_FILE.unlink(missing_ok=True))
 
     # 超时自动退出
     def auto_exit():
