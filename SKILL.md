@@ -38,6 +38,7 @@ metadata:
 `refresh-profile` 的字段保留语义：
 - **重建**：`department.name`, `primary_domain`, `secondary_domains`, `freeform_context`, `industry`, `sources.*`, `kb_init.*`
 - **保留**：`department.feishu_group_id`, `tracking.*`, `topic_weights`（只合并新话题）, `history`, `signal_rules`
+- **重置**：`runtime.last_signal_update` → `null`
 
 ## 执行流程
 
@@ -108,7 +109,7 @@ AI 分析读取到的文档内容，推断：
 |---|---|---|
 | 传输/认证失败 | MCP 调用返回错误、超时或权限拒绝 | → `degraded` |
 | 业务为空 | 调用成功但返回 0 条消息（安静日） | 保持 `active`；仅施加衰减 |
-| 部分获取 | 至少一页成功但分页不完整 | 保持 `active`；处理可用消息；添加 warning |
+| 部分获取 | 至少一页成功但分页不完整 | 保持 `active`；处理可用消息；添加 `GROUP_CHAT_PARTIAL_FETCH` warning |
 | 完整成功 | 所有页获取无错误，≥1 条消息被处理 | 保持/恢复 `active` |
 
 传输/认证失败时：设置 `status: degraded`，添加 `GROUP_CHAT_TRANSPORT_FAILURE` 到 `digest_meta.warnings[]`，继续到第二步。
