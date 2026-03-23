@@ -48,59 +48,12 @@ metadata:
 
 | 状态 | 操作 |
 |---|---|
-| 文件不存在，也无 `config/profile.yaml` | 触发飞书 KB 初始化（路径 A） |
-| 文件不存在，但 `config/profile.yaml` 存在 | 执行迁移（见下方），状态设为 `awaiting_group_id` |
-| `uninitialized` | 触发飞书 KB 初始化（路径 A） |
+| 文件不存在，也无 `config/profile.yaml` | 执行初始化流程（见附录 A） |
+| 文件不存在，但 `config/profile.yaml` 存在 | 执行迁移（见附录 C），状态设为 `awaiting_group_id` |
+| `uninitialized` | 执行初始化流程（见附录 A） |
 | `awaiting_group_id` | 提示用户执行 `/ai-daily set-group <chat_id>`，然后退出 |
 | `active` | 继续到第一步 |
 | `degraded` | 跳过第一步，直接从第二步开始，使用当前画像 |
-
-#### 路径 A：飞书 KB 初始化
-
-使用飞书 MCP 工具读取知识库：
-
-| 逻辑能力 | 已知工具名 | 用途 |
-|---|---|---|
-| 列出 KB 知识节点 | `feishu_wiki_space_node` | 枚举知识库页面 |
-| 读取文档内容 | `feishu_fetch_doc` | 读取页面内容 |
-
-读取范围由 `kb_init` 配置控制（默认：2 层深度，最多 20 页，跳过 >50KB 的页面）。
-
-AI 分析读取到的文档内容，推断：
-- 部门名称、主领域（`primary_domain`）、次要领域（`secondary_domains`）
-- 行业描述（`industry`）、自由文本上下文（`freeform_context`）
-- 初始话题权重（`topic_weights`）和跟踪实体（`tracking`）
-
-#### 来源探索（初始化专属步骤）
-
-在推断出部门领域后，AI **必须主动搜索并验证**适合该部门的信息来源，写入 `sources.direct` 和 `sources.search_queries`。不能凭空猜测或只给泛用来源。
-
-**执行方式**：
-1. 根据部门的 `primary_domain` + `industry` + `freeform_context`，搜索该领域的权威信息来源（如 "fintech industry news sources"、"B2B SaaS competitive intelligence sources"）
-2. 识别以下三类来源并分别处理：
-
-| 来源类型 | 写入字段 | 示例 |
-|---|---|---|
-| **一手来源页面**（官方博客/changelog/release 页面、监管机构公告页、行业协会发布页） | `sources.direct` | 竞品官方博客 URL、行业监管公告页 URL |
-| **结构化搜索词**（用于 WebSearch，覆盖行业动态/竞品/政策/技术趋势） | `sources.search_queries` | `"fintech regulation 2026"`、`"[竞品名] 最新发布"` |
-| **聚合/社区页面**（行业论坛、Reddit 子版、HN、专业社区） | `sources.direct`（标注为社区源） | `reddit.com/r/fintech`、`news.ycombinator.com` |
-
-3. 对 `sources.direct` 中的每个 URL，尝试一次 WebFetch 验证可访问性。不可访问的来源标注在 `kb_init.init_coverage_note` 中但仍保留（可能是临时网络问题）
-4. `sources.search_queries` 至少包含 5 条种子查询词，覆盖：部门核心业务方向、主要竞品/跟踪实体、行业政策/法规、技术趋势
-5. 将来源探索结果展示给用户确认，告知"以下是为贵部门推荐的信息来源，后续每日日报将从这些渠道采集。如需调整可手动编辑 `config/dept-profile.yaml` 的 `sources` 字段"
-
-生成 `config/dept-profile.yaml`（参考 `reference/dept-profile-template.yaml`），状态设为 `awaiting_group_id`。
-
-如果个别页面读取失败，跳过并记录到 `kb_init.init_coverage_note`，同时添加 `KB_INIT_PAGES_SKIPPED` warning 到 `digest_meta.warnings[]`。如果所有页面失败，退出并提示检查飞书 MCP 连接。如果可读页面 <3，生成最小画像（`primary_domain: general`），提示用户确认领域。如果 AI 无法从文档中推断出 `primary_domain`，设为 `general` 并提示用户通过 `/ai-daily set-domain <domain>` 确认。
-
-#### 旧版 profile.yaml 迁移
-
-如果 `config/profile.yaml` 存在但 `config/dept-profile.yaml` 不存在：
-1. 读取旧文件
-2. 映射可用字段到新 schema（写入 `schema_version: 1`）
-3. 以下字段不迁移：`server.port`, `server.timeout_hours`, `role`, `role_context`, `topics`, `exclude_topics`, `daily.*`
-4. 将旧文件重命名为 `config/profile.yaml.bak`
-5. 状态设为 `awaiting_group_id`
 
 ### 第一步：读取群聊信号
 
@@ -730,3 +683,60 @@ function onLeave() {
 - 原文链接都存在且可点击
 - 页面保留 `/api/feedback` 上报逻辑，且只提交完整 session summary
 - 拓展阅读卡片使用虚线边框和灰色标签样式
+
+---
+
+## 附录：初始化流程（仅首次使用时执行）
+
+以下内容仅在 `dept-profile.yaml` 不存在或状态为 `uninitialized` 时需要阅读。日常运行（状态为 `active` 或 `degraded`）请直接从第一步开始。
+
+### 附录 A：飞书 KB 初始化
+
+使用飞书 MCP 工具读取知识库：
+
+| 逻辑能力 | 已知工具名 | 用途 |
+|---|---|---|
+| 列出 KB 知识节点 | `feishu_wiki_space_node` | 枚举知识库页面 |
+| 读取文档内容 | `feishu_fetch_doc` | 读取页面内容 |
+
+读取范围由 `kb_init` 配置控制（默认：2 层深度，最多 20 页，跳过 >50KB 的页面）。
+
+AI 分析读取到的文档内容，推断：
+- 部门名称、主领域（`primary_domain`）、次要领域（`secondary_domains`）
+- 行业描述（`industry`）、自由文本上下文（`freeform_context`）
+- 初始话题权重（`topic_weights`）和跟踪实体（`tracking`）
+
+生成 `config/dept-profile.yaml`（参考 `reference/dept-profile-template.yaml`），状态设为 `awaiting_group_id`。
+
+**异常处理**：
+- 个别页面读取失败 → 跳过并记录到 `kb_init.init_coverage_note`，添加 `KB_INIT_PAGES_SKIPPED` warning
+- 所有页面失败 → 退出并提示检查飞书 MCP 连接
+- 可读页面 <3 → 生成最小画像（`primary_domain: general`），提示用户确认领域
+- AI 无法推断 `primary_domain` → 设为 `general`，提示用户通过 `/ai-daily set-domain <domain>` 确认
+
+### 附录 B：来源探索
+
+在附录 A 推断出部门领域后，AI **必须主动搜索并验证**适合该部门的信息来源，写入 `sources.direct` 和 `sources.search_queries`。不能凭空猜测或只给泛用来源。
+
+**执行方式**：
+1. 根据部门的 `primary_domain` + `industry` + `freeform_context`，搜索该领域的权威信息来源（如 "fintech industry news sources"、"B2B SaaS competitive intelligence sources"）
+2. 识别以下三类来源并分别处理：
+
+| 来源类型 | 写入字段 | 示例 |
+|---|---|---|
+| **一手来源页面**（官方博客/changelog/release 页面、监管机构公告页、行业协会发布页） | `sources.direct` | 竞品官方博客 URL、行业监管公告页 URL |
+| **结构化搜索词**（用于 WebSearch，覆盖行业动态/竞品/政策/技术趋势） | `sources.search_queries` | `"fintech regulation 2026"`、`"[竞品名] 最新发布"` |
+| **聚合/社区页面**（行业论坛、Reddit 子版、HN、专业社区） | `sources.direct`（标注为社区源） | `reddit.com/r/fintech`、`news.ycombinator.com` |
+
+3. 对 `sources.direct` 中的每个 URL，尝试一次 WebFetch 验证可访问性。不可访问的来源标注在 `kb_init.init_coverage_note` 中但仍保留（可能是临时网络问题）
+4. `sources.search_queries` 至少包含 5 条种子查询词，覆盖：部门核心业务方向、主要竞品/跟踪实体、行业政策/法规、技术趋势
+5. 将来源探索结果展示给用户确认，告知"以下是为贵部门推荐的信息来源，后续每日日报将从这些渠道采集。如需调整可手动编辑 `config/dept-profile.yaml` 的 `sources` 字段"
+
+### 附录 C：旧版 profile.yaml 迁移
+
+如果 `config/profile.yaml` 存在但 `config/dept-profile.yaml` 不存在：
+1. 读取旧文件
+2. 映射可用字段到新 schema（写入 `schema_version: 1`）
+3. 以下字段不迁移：`server.port`, `server.timeout_hours`, `role`, `role_context`, `topics`, `exclude_topics`, `daily.*`
+4. 将旧文件重命名为 `config/profile.yaml.bak`
+5. 状态设为 `awaiting_group_id`
