@@ -417,6 +417,16 @@ function onLeave() {
 
 更新或创建 `output/index.html`，列出所有已生成的日报。
 
+### 第五点五步：更新画像历史
+
+每次日报生成完成后，更新 `config/dept-profile.yaml`：
+
+1. 从本次日报中提取 top 3 话题
+2. 将群聊信号摘要为 1-3 条短字符串
+3. 追加/覆盖 `history` 中当日条目（同日多次运行 last-write-wins）
+4. 裁剪 `history` 仅保留最近 7 个日历日
+5. 更新 `runtime.last_digest_run` 为当前时间
+
 ### 第六步：启动反馈服务
 
 1. 使用现有的 `scripts/feedback_server.py` 启动本地 HTTP 服务（serve `output/` 目录 + `POST /api/feedback` 写入 `data/feedback/{date}.json`，端口默认 17890，冲突自动 +1，超时 2 小时自动退出）
