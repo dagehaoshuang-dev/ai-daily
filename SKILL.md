@@ -41,40 +41,48 @@ metadata:
 
 ## 执行流程
 
-### 第零步：首次使用引导
+### 第零步：画像检查与状态路由
 
-检查工作目录下 `config/profile.yaml` 是否存在。
+检查 `config/dept-profile.yaml` 的状态，按以下路由执行：
 
-**不存在 → 向用户展示引导面板：**
+| 状态 | 操作 |
+|---|---|
+| 文件不存在，也无 `config/profile.yaml` | 触发飞书 KB 初始化（路径 A） |
+| 文件不存在，但 `config/profile.yaml` 存在 | 执行迁移（见下方），状态设为 `awaiting_group_id` |
+| `uninitialized` | 触发飞书 KB 初始化（路径 A） |
+| `awaiting_group_id` | 提示用户执行 `/ai-daily set-group <chat_id>`，然后退出 |
+| `active` | 继续到第一步 |
+| `degraded` | 跳过第一步，直接从第二步开始，使用当前画像 |
 
-```
-👋 首次使用 AI 日报，帮你快速配置（只需 30 秒）
+#### 路径 A：飞书 KB 初始化
 
-━━ ① 你的角色 ━━（选一个数字）
-1. 💻 技术研发 — 关注技术实现、框架工具、性能优化
-2. 📱 产品经理 — 关注行业应用、竞品动态、用户体验
-3. 📊 技术管理 — 关注架构决策、团队效能、技术战略
-4. 🔬 AI 研究员 — 关注前沿论文、算法突破、学术动态
-5. 📣 市场/运营 — 关注行业趋势、商业模式、投融资
-6. 🎯 综合关注 — 不限定角色，全面了解 AI 动态
+使用飞书 MCP 工具读取知识库：
 
-━━ ② 关注话题 ━━（选几个数字，如 1 3 5 7）
-1. 🤖 大模型      2. 🔗 AI Agent    3. 📦 开源
-4. 🔍 RAG         5. 💻 AI 编程     6. 🏗️ AI 基础设施
-7. 📐 AI 应用落地  8. 📜 AI 政策法规  9. 📄 论文解读
-10. 🌐 多模态
+| 逻辑能力 | 已知工具名 | 用途 |
+|---|---|---|
+| 列出 KB 知识节点 | `feishu_wiki_space_node` | 枚举知识库页面 |
+| 读取文档内容 | `feishu_fetch_doc` | 读取页面内容 |
 
-━━ ③ 关注深度 ━━（选一个数字）
-1. ⚡ 速览模式 — 精简摘要，10 条内
-2. 📰 标准模式 — 结构化摘要 + 解读，15 条左右（推荐）
-3. 📚 深度模式 — 详细分析 + 行动建议，最多 20 条
+读取范围由 `kb_init` 配置控制（默认：2 层深度，最多 20 页，跳过 >50KB 的页面）。
 
-示例回复：角色 1，话题 1 2 3 5，深度 2
-```
+AI 分析读取到的文档内容，推断：
+- 部门名称、主领域（`primary_domain`）、次要领域（`secondary_domains`）
+- 行业描述（`industry`）、自由文本上下文（`freeform_context`）
+- 推荐数据源（`sources.direct`、`sources.search_queries`）
+- 初始话题权重（`topic_weights`）和跟踪实体（`tracking`）
 
-等待用户回复后，解析选择，生成 `config/profile.yaml`（包含 role、topics 及 keywords、daily 配置、server 配置），告知用户配置已保存，然后继续。
+生成 `config/dept-profile.yaml`（参考 `reference/dept-profile-template.yaml`），状态设为 `awaiting_group_id`。
 
-**已存在 → 读取配置，跳到第一步。**
+如果个别页面读取失败，跳过并记录到 `kb_init.init_coverage_note`，同时添加 `KB_INIT_PAGES_SKIPPED` warning 到 `digest_meta.warnings[]`。如果所有页面失败，退出并提示检查飞书 MCP 连接。如果可读页面 <3，生成最小画像（`primary_domain: general`），提示用户确认领域。如果 AI 无法从文档中推断出 `primary_domain`，设为 `general` 并提示用户通过 `/ai-daily set-domain <domain>` 确认。
+
+#### 旧版 profile.yaml 迁移
+
+如果 `config/profile.yaml` 存在但 `config/dept-profile.yaml` 不存在：
+1. 读取旧文件
+2. 映射可用字段到新 schema（写入 `schema_version: 1`）
+3. 以下字段不迁移：`server.port`, `server.timeout_hours`, `role`, `role_context`, `topics`, `exclude_topics`, `daily.*`
+4. 将旧文件重命名为 `config/profile.yaml.bak`
+5. 状态设为 `awaiting_group_id`
 
 ### 第一步：理解用户 — 构建本次编辑策略
 
