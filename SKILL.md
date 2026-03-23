@@ -118,7 +118,7 @@ runtime:
 | 文件不存在，也无 `config/profile.yaml` | 执行初始化流程（见附录 A） |
 | 文件不存在，但 `config/profile.yaml` 存在 | 执行迁移（见附录 C），状态设为 `awaiting_group_id` |
 | `uninitialized` | 执行初始化流程（见附录 A） |
-| `awaiting_group_id` | 提示用户执行 `/ai-daily set-group <chat_id>`，然后退出 |
+| `awaiting_group_id` | 提示用户执行 `/ai-daily set-group <chat_id>`；如果用户提供了 ID，写入画像后执行附录 A-2（群聊历史画像补充），然后转为 `active` |
 | `active` | 继续到第一步 |
 | `degraded` | 跳过第一步，直接从第二步开始，使用当前画像 |
 
@@ -799,15 +799,40 @@ function onLeave() {
 AI 分析读取到的文档内容，推断：
 - 部门名称、主领域（`primary_domain`）、次要领域（`secondary_domains`）
 - 行业描述（`industry`）、自由文本上下文（`freeform_context`）
-- 初始话题权重（`topic_weights`）和跟踪实体（`tracking`）
 
 生成 `config/dept-profile.yaml`（参考 `reference/dept-profile-template.yaml`），状态设为 `awaiting_group_id`。
 
+**KB 的定位**：KB 提供的是部门的"官方自我描述"——组织架构、项目定义、OKR 等。这些信息用于推断部门领域和行业背景，但**不能替代群聊历史中的真实行为数据**。如果 KB 和群聊历史矛盾（比如 KB 写的是"大模型研发"但群里天天在讨论产品竞品），以群聊历史为准。
+
 **异常处理**：
 - 个别页面读取失败 → 跳过并记录到 `kb_init.init_coverage_note`，添加 `KB_INIT_PAGES_SKIPPED` warning
-- 所有页面失败 → 退出并提示检查飞书 MCP 连接
-- 可读页面 <3 → 生成最小画像（`primary_domain: general`），提示用户确认领域
+- 所有页面失败 → 不阻断初始化，标记 KB 为不可用，继续到附录 A-2 用群聊历史建画像
+- 可读页面 <3 → 生成最小画像（`primary_domain: general`），继续到附录 A-2 补充
 - AI 无法推断 `primary_domain` → 设为 `general`，提示用户通过 `/ai-daily set-domain <domain>` 确认
+
+### 附录 A-2：群聊历史画像补充
+
+当用户设置了 `feishu_group_id` 后（从 `awaiting_group_id` 转出时），**立即读取该群最近 7 天的历史消息**，用于补充和修正从 KB 推断出的初始画像。
+
+**执行方式**：
+1. 使用群聊工具读取最近 7 天的消息（UTC+8 时间，从 7 天前 00:00 到当前时间）
+2. 按第一步的同一套流程处理：**数据清洗 → 结构化中间提取 → 信号提取**
+3. 但目标不同于每日更新——这里是**一次性批量建立画像基线**：
+
+**从 7 天群聊历史中提取**：
+- **高频话题** → 写入 `topic_weights`（7 天内被多天讨论的话题权重更高）
+- **反复提到的产品/公司/项目名** → 写入 `tracking` 各分类（competitors/products/technologies 等）
+- **群友频繁分享的链接域名** → 补充到 `sources.direct`
+- **工作讨论中反复出现的技术方向/工具** → 用于修正 `primary_domain` 和 `secondary_domains`（如果与 KB 推断的不一致，以群聊行为为准）
+
+**与 KB 画像的合并规则**：
+- `primary_domain`：如果群聊历史明确指向不同领域，以群聊为准，降级 KB 推断结果到 `secondary_domains`
+- `tracking`：合并 KB 和群聊历史中的所有实体，群聊历史中出现的实体 `score` 更高
+- `topic_weights`：合并两个来源的话题，群聊历史中的话题初始权重 = `0.6`（高于 `new_topic_initial_weight` 的 `0.4`，因为有 7 天行为数据支撑）
+- `sources`：合并两个来源推荐的数据源，去重
+
+**如果群聊工具不可用**：
+跳过此步骤，仅依赖 KB 画像，状态直接设为 `active`。在 `digest_meta.warnings[]` 中记录 `CHAT_HISTORY_UNAVAILABLE`。
 
 ### 附录 B：来源探索
 
