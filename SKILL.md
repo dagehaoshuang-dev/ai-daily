@@ -84,24 +84,36 @@ AI 分析读取到的文档内容，推断：
 4. 将旧文件重命名为 `config/profile.yaml.bak`
 5. 状态设为 `awaiting_group_id`
 
-### 第一步：理解用户 — 构建本次编辑策略
+### 第一步：读取群聊信号
 
-AI 作为"编辑"，先通读用户画像，制定本次日报的编辑策略：
+使用飞书 MCP 工具（`feishu_im_user_get_messages`）读取指定群聊（`department.feishu_group_id`）当天的消息。
 
-1. **读取 profile.yaml**：理解用户角色（role + role_context）、关注话题及优先级、偏好深度
-2. **读取历史反馈**：扫描 `data/feedback/` 目录下最近 7 天的 JSON 文件（结构参见 `reference/feedback_schema.json`），理解用户的真实行为偏好：
-   - 用户投票/收藏了哪些类型的资讯？→ 这些话题用户真正在意
-   - 用户在哪些卡片上停留最久？→ 隐式兴趣信号
-   - 用户关注/取消了哪些标签？→ 兴趣的动态变化
-   - 用户使用了哪些 AI 工具、深入了哪些话题？→ 用户正在探索的方向
-   - 用户阅读时长和事件密度？→ 判断用户偏好速览还是深读
-3. **综合判断**：profile.yaml 是用户的"自我认知"，反馈数据是用户的"真实行为"。两者可能不一致（比如用户说关注 RAG 但实际反馈中 Agent 话题得分更高）。**以行为数据为准，profile 为辅**。
-4. **制定搜索策略**：基于以上理解，AI 自主决定：
-   - 本次搜索的关键词组合（不局限于 profile.yaml 中的 keywords）
-   - 各话题的搜索权重（反馈得分高的话题多搜几条）
-   - 是否需要拓展新的搜索方向（用户行为暗示的新兴趣）
+**消息获取**：从今天 UTC+8 00:00 分页读取到当前时间。持续分页直到到达当天起始时间或达到 `signal_rules.max_messages_per_run` 条上限。如果获取的消息超过 `signal_rules.compress_after_messages` 条，先摘要/压缩再分析。
 
-如果 `data/feedback/` 不存在、最近 7 天无数据、或文件结构不合法，则视为"暂无历史反馈"，**不要报错，不要臆造反馈结论**，直接退回到仅基于 profile.yaml 的编辑策略。
+**信号提取规则**（所有阈值来自 `signal_rules.*`）：
+- **话题增强**：某话题被 ≥ `topic_boost_threshold` 条消息提及 → `weight += daily_boost`（上限 1.0）
+- **实体信号**：公司/产品/市场名在 ≥ `entity_threshold` 条消息中出现 → 新增或更新 `tracking` 条目
+- **新话题**：不在画像中的话题，被 ≥ `new_topic_threshold` 次提及 → 以 `new_topic_initial_weight` 权重新增
+- **噪声过滤**：单次提及忽略
+
+**提取后处理**：
+- 对当日未收到信号的所有话题施加衰减：`weight *= daily_decay`（下限 `weight_floor`）
+- 剪枝 tracking 条目：`last_signal` > `prune_days` 天前 且 `score` < `prune_score_threshold` 且 `signal_count_7d == 0`（如果 `prune_require_zero_7d` 为 true）
+- 将增量变更写回 `config/dept-profile.yaml`
+- 更新 `runtime.last_signal_update` 和 `runtime.last_step1_result`
+
+**故障分类**：
+
+| 故障类型 | 条件 | 状态迁移 |
+|---|---|---|
+| 传输/认证失败 | MCP 调用返回错误、超时或权限拒绝 | → `degraded` |
+| 业务为空 | 调用成功但返回 0 条消息（安静日） | 保持 `active`；仅施加衰减 |
+| 部分获取 | 至少一页成功但分页不完整 | 保持 `active`；处理可用消息；添加 warning |
+| 完整成功 | 所有页获取无错误，≥1 条消息被处理 | 保持/恢复 `active` |
+
+传输/认证失败时：设置 `status: degraded`，添加 `GROUP_CHAT_TRANSPORT_FAILURE` 到 `digest_meta.warnings[]`，继续到第二步。
+
+**从 `degraded` 恢复**：当后续运行中第一步以完整成功或部分获取完成时，自动恢复为 `active`。
 
 ### 第二步：采集 — AI 驱动的智能搜索
 
