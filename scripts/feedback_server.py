@@ -217,7 +217,7 @@ def main():
     try:
         server.serve_forever()
     except KeyboardInterrupt:
-        print("\n🛑 手动停止服务1")
+        print("\n🛑 手动停止服务")
         PORT_FILE.unlink(missing_ok=True)
 
 
