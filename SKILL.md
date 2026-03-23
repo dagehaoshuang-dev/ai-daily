@@ -40,6 +40,35 @@ metadata:
 - **保留**：`department.feishu_group_id`, `tracking.*`, `topic_weights`（只合并新话题）, `history`, `signal_rules`
 - **重置**：`runtime.last_signal_update` → `null`
 
+## 飞书工具适配
+
+不同用户安装的飞书 MCP 插件不同，工具名也不同。**不要假设任何固定工具名**，在第零步之前先执行工具发现：
+
+1. 扫描当前可用的 MCP 工具列表，查找包含 `feishu`、`lark`、`飞书` 关键词的工具
+2. 按以下 3 个逻辑能力匹配可用工具：
+
+| 逻辑能力 | 常见工具名变体 | 用途 |
+|---|---|---|
+| 列出知识库页面 | `feishu_wiki_space_node`, `feishu_wiki`, `lark_wiki_list` 等 | KB 初始化 |
+| 读取文档内容 | `feishu_fetch_doc`, `feishu_doc`, `lark_doc_read` 等 | KB 初始化 |
+| 读取群聊消息 | `feishu_im_user_get_messages`, `feishu_chat`, `lark_chat_messages` 等 | 群聊信号 |
+
+3. 如果某个逻辑能力找不到对应工具：
+   - KB 相关工具缺失 → 跳过 KB 初始化，提示用户手动创建 `config/dept-profile.yaml`
+   - 群聊工具缺失 → 永久跳过第一步（等同于 `degraded`），仅依赖搜索和反馈数据
+4. 将发现的工具名记录到 `config/dept-profile.yaml` 的 `runtime` 字段中，后续运行直接使用，无需每次重新发现
+
+```yaml
+runtime:
+  feishu_tools:
+    wiki_list: "feishu_wiki"        # 实际发现的工具名
+    doc_read: "feishu_doc"
+    chat_messages: "feishu_chat"
+  last_signal_update: null
+  last_digest_run: null
+  last_step1_result: null
+```
+
 ## 执行流程
 
 ### 第零步：画像检查与状态路由
@@ -59,7 +88,7 @@ metadata:
 
 **⚠️ 核心边界**：群聊消息、群聊热点分析、群聊总结文档**只用于画像更新和兴趣加权，不直接作为日报正文来源**。群聊信号回答的是"这个部门最近在关心什么"，日报回答的是"基于这些关心点，今天外部世界发生了哪些值得看的事"。除非用户明确要求输出"群聊总结"或"会议纪要"，否则群聊内容不能出现在日报条目中。
 
-使用飞书 MCP 工具（`feishu_im_user_get_messages`）读取指定群聊（`department.feishu_group_id`）当天的消息。
+使用飞书群聊工具（`runtime.feishu_tools.chat_messages` 中记录的工具名）读取指定群聊（`department.feishu_group_id`）当天的消息。
 
 **消息获取**：从今天 UTC+8 00:00 分页读取到当前时间。持续分页直到到达当天起始时间或达到 `signal_rules.max_messages_per_run` 条上限。如果获取的消息超过 `signal_rules.compress_after_messages` 条，先摘要/压缩再分析。
 
@@ -701,12 +730,7 @@ function onLeave() {
 
 ### 附录 A：飞书 KB 初始化
 
-使用飞书 MCP 工具读取知识库：
-
-| 逻辑能力 | 已知工具名 | 用途 |
-|---|---|---|
-| 列出 KB 知识节点 | `feishu_wiki_space_node` | 枚举知识库页面 |
-| 读取文档内容 | `feishu_fetch_doc` | 读取页面内容 |
+使用飞书工具适配阶段发现的工具（`runtime.feishu_tools.wiki_list` 和 `runtime.feishu_tools.doc_read`）读取知识库。
 
 读取范围由 `kb_init` 配置控制（默认：2 层深度，最多 20 页，跳过 >50KB 的页面）。
 

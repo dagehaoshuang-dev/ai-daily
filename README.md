@@ -157,8 +157,12 @@ signal_rules:
 
 ## 飞书 MCP 依赖
 
-| 能力 | 工具名 | 用途 |
+Skill 会自动发现当前可用的飞书 MCP 工具，不要求特定插件或工具名。需要以下 3 个逻辑能力：
+
+| 能力 | 常见工具名 | 用途 |
 |---|---|---|
-| 列出 KB 节点 | `feishu_wiki_space_node` | 初始化画像 |
-| 读取文档 | `feishu_fetch_doc` | 初始化画像 |
-| 读取群聊消息 | `feishu_im_user_get_messages` | 每日信号采集 |
+| 列出 KB 页面 | `feishu_wiki_space_node`, `feishu_wiki`, `lark_wiki_list` | 初始化画像 |
+| 读取文档 | `feishu_fetch_doc`, `feishu_doc`, `lark_doc_read` | 初始化画像 |
+| 读取群聊消息 | `feishu_im_user_get_messages`, `feishu_chat`, `lark_chat_messages` | 每日信号采集 |
+
+如果某项工具缺失，skill 会自动降级（跳过 KB 初始化或群聊读取），不会报错阻断。
