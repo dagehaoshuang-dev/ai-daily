@@ -102,6 +102,20 @@ Notes:
 - `refresh-profile` re-runs Path A; existing `feishu_group_id` is carried over so users don't need to re-run `set-group`
 - `secondary_domains` are not directly settable via command; they are inferred during KB init or `refresh-profile`, and can be manually edited in `dept-profile.yaml`
 
+**`refresh-profile` field semantics** — rebuild static profile, preserve dynamic behavior data:
+
+| Field Group | Behavior |
+|---|---|
+| `department.name`, `primary_domain`, `secondary_domains`, `freeform_context`, `industry` | **Rebuilt** from KB |
+| `department.feishu_group_id` | **Preserved** if already set |
+| `sources.direct`, `sources.search_queries` | **Rebuilt** from KB (domain inference) |
+| `kb_init.*` | **Rebuilt** (new init run) |
+| `tracking.*` | **Preserved** — contains accumulated signal data |
+| `topic_weights` | **Preserved**; new topics from KB are merged in at `new_topic_initial_weight` |
+| `history` | **Preserved** |
+| `signal_rules` | **Preserved** (user may have tuned values) |
+| `runtime` | **Reset** `last_signal_update` to null |
+
 ---
 
 ## dept-profile.yaml Schema
@@ -187,14 +201,41 @@ history:
   - date: "2026-03-22"
     top_topics: ["竞品动态", "行业趋势"]
     group_signals: ["3 messages about Notion AI", "1 link to G2 report"]
+
+# Runtime metadata (auto-updated each run; do not edit manually)
+runtime:
+  last_signal_update: "2026-03-23T11:30:00+08:00"   # Last successful Step 1 completion
+  last_digest_run: "2026-03-23T11:35:00+08:00"       # Last successful Step 4 completion
+  last_step1_result: "full_success"                   # full_success | partial_fetch | business_empty | transport_auth_failure
 ```
+
+### Warning Structure
+
+`digest_meta.warnings[]` entries in the JSON payload use this schema:
+
+```json
+{
+  "code": "GROUP_CHAT_PARTIAL_FETCH",
+  "message": "Pagination incomplete; processed 312 of estimated 800+ messages.",
+  "severity": "warning"
+}
+```
+
+Defined warning codes:
+
+| Code | Severity | Trigger |
+|---|---|---|
+| `GROUP_CHAT_TRANSPORT_FAILURE` | `error` | `feishu_im_user_get_messages` returns transport/auth error |
+| `GROUP_CHAT_PARTIAL_FETCH` | `warning` | Pagination incomplete but ≥1 page succeeded |
+| `KB_INIT_PAGES_SKIPPED` | `info` | Some KB pages skipped during init (size/permission) |
+| `PROFILE_DEGRADED` | `warning` | Profile in `degraded` state; group chat signals not updated |
 
 ### Controlled Domain Vocabulary
 
 `primary_domain` must be one of:
 `ai`, `product`, `engineering`, `marketing`, `finance`, `legal`, `operations`, `sales`, `research`, `hr`, `data`, `design`, `growth`, `security`, `strategy`, `customer_success`, `bd`, `general`
 
-`secondary_domains` may use any of the above **or** freeform strings. `freeform_context` accepts free text and is passed directly to the AI as additional context when building the search strategy.
+`secondary_domains` should prefer controlled vocab values; freeform strings are allowed only when no controlled tag fits. `freeform_context` accepts free text and is passed directly to the AI as additional context when building the search strategy.
 
 ---
 
