@@ -1,0 +1,176 @@
+{
+  "meta": {
+    "date": "2026-03-23",
+    "date_label": "2026年3月23日 · 周一",
+    "generated_at": "2026-03-23 09:30",
+    "generated_time": "09:30",
+    "role": "综合关注"
+  },
+  "left_sidebar": {
+    "overview": [
+      {
+        "title": "OpenAI GPT-5.4 面向专业工作进一步收敛",
+        "text": "模型定位更明确地覆盖编码、复杂协作与长任务执行，Agent 工作流开始从实验阶段走向产品化。"
+      },
+      {
+        "title": "Google 把 Gemini 深度嵌进 Workspace",
+        "text": "Docs、Sheets、Slides、Drive 的一体化意味着 AI 能力正从独立聊天工具转向默认办公层。"
+      },
+      {
+        "title": "Anthropic 与 NVIDIA 都在推 Agent 基础设施",
+        "text": "一边强化计算机使用，一边优化长上下文和吞吐，说明 Agent 生态正同时补齐软件与硬件两端。"
+      }
+    ],
+    "actions": [
+      {
+        "type": "learn",
+        "text": "梳理 GPT-5.4、Claude Sonnet 4.6、Gemini 最新定位差异，建立你的模型选型基线。",
+        "prompt": "请帮我对比 GPT-5.4、Claude Sonnet 4.6 和 Gemini 最新版本在编码、Agent、长任务协作上的差异，并给出选型建议。"
+      },
+      {
+        "type": "try",
+        "text": "用一个真实工作流试验“文档检索 + 代码修改 + 汇总输出”的多步 Agent 链路。",
+        "prompt": "请帮我设计一个多步 Agent 工作流实验，包含文档检索、代码修改、结果校验和最终汇报。"
+      },
+      {
+        "type": "watch",
+        "text": "持续关注 Workspace、Office 和开发环境的 AI 原生集成，判断入口层的竞争格局。",
+        "prompt": "请帮我跟踪办公入口层和开发入口层的 AI 集成趋势，并总结对产品策略的影响。"
+      },
+      {
+        "type": "alert",
+        "text": "在 AI 编程持续提效的同时，补上审计、权限和安全扫描，否则产出质量会越来越难控。",
+        "prompt": "请帮我制定一套 AI 编程治理方案，覆盖权限、审计、代码审查和安全扫描。"
+      }
+    ],
+    "trends": {
+      "rising": ["Agent 平台化", "工作流编排", "企业级治理", "长上下文基础设施"],
+      "cooling": ["单点 Prompt 技巧", "孤立聊天产品"],
+      "steady": ["大模型", "AI 编程", "开源模型", "办公套件集成"],
+      "insight": "AI 产品竞争正在从“模型一次回答得多好”转向“能否稳定地嵌入真实工作流”。入口层、执行层和治理层开始同步升级。"
+    }
+  },
+  "articles": [
+    {
+      "id": "article-1",
+      "title": "OpenAI 推出 GPT-5.4，继续强化专业工作与编码协作",
+      "priority": "major",
+      "time_label": "今天",
+      "source": "OpenAI / 产品更新",
+      "url": "https://openai.com/",
+      "summary": {
+        "what_happened": "GPT-5.4 的定位进一步向专业工作、复杂任务与开发协作收敛，强调更可靠的长任务执行和工具配合。",
+        "why_it_matters": "这类模型不再只是回答问题，而是直接承接工作流中的一个执行角色。"
+      },
+      "relevance": "如果你关注 AI Agent 和 AI 编程，这意味着模型选型要开始考虑稳定协作能力，而不是只看单轮回答质量。",
+      "tags": ["#大模型", "#OpenAI", "#AI编程"],
+      "is_exploration": false
+    },
+    {
+      "id": "article-2",
+      "title": "Google 将 Gemini 更深地嵌入 Docs、Sheets、Slides 与 Drive",
+      "priority": "major",
+      "time_label": "今天",
+      "source": "Google Workspace",
+      "url": "https://workspace.google.com/",
+      "summary": {
+        "what_happened": "Google 正把 Gemini 的生成、检索和协作能力更深地放进常用办公组件，让 AI 成为默认入口的一部分。",
+        "why_it_matters": "入口层一旦被 AI 原生化，用户不再显式“打开 AI 工具”，而是在原工作界面里直接完成任务。"
+      },
+      "relevance": "这对产品侧很重要，因为 AI 的竞争会越来越多地发生在宿主应用内部，而不是独立聊天窗口。",
+      "tags": ["#Google", "#AI应用", "#办公协同"],
+      "is_exploration": false
+    },
+    {
+      "id": "article-3",
+      "title": "Anthropic Claude Sonnet 4.6 强化编码与计算机使用能力",
+      "priority": "notable",
+      "time_label": "今天",
+      "source": "Anthropic",
+      "url": "https://www.anthropic.com/",
+      "summary": {
+        "what_happened": "Claude Sonnet 4.6 持续加码编码、工具调用和计算机使用场景，使模型更适合承担半自动执行任务。",
+        "why_it_matters": "模型能力正向“可操作系统界面和真实工具”的方向延伸，而不是停留在文本层。"
+      },
+      "relevance": "如果你在评估 Agent 产品，这类能力会直接影响任务边界、可用性和安全设计。",
+      "tags": ["#Anthropic", "#Agent", "#AI编程"],
+      "is_exploration": false
+    },
+    {
+      "id": "article-4",
+      "title": "NVIDIA Nemotron 3 Super 聚焦 Agent 长上下文与高吞吐",
+      "priority": "notable",
+      "time_label": "今天",
+      "source": "NVIDIA",
+      "url": "https://www.nvidia.com/",
+      "summary": {
+        "what_happened": "NVIDIA 面向 Agent 场景继续优化模型与基础设施，突出长上下文处理、高吞吐和部署效率。",
+        "why_it_matters": "Agent 进入生产后，成本、延迟和并发会迅速成为和模型质量同等重要的问题。"
+      },
+      "relevance": "这会影响你未来评估“自己做 Agent 平台”还是“直接接入第三方能力”的取舍。",
+      "tags": ["#NVIDIA", "#AI基础设施", "#Agent"],
+      "is_exploration": false
+    },
+    {
+      "id": "article-5",
+      "title": "Microsoft 强调企业多模型治理与 Agent 办公协同",
+      "priority": "normal",
+      "time_label": "今天",
+      "source": "Microsoft",
+      "url": "https://www.microsoft.com/",
+      "summary": {
+        "what_happened": "微软继续把重点放在企业场景下的多模型编排、权限治理和办公协同能力整合。",
+        "why_it_matters": "Agent 规模化落地不只靠模型本身，还需要权限、日志、成本和合规一起成熟。"
+      },
+      "relevance": "如果你的目标用户是团队或企业客户，治理层设计会越来越成为产品分水岭。",
+      "tags": ["#Microsoft", "#企业AI", "#治理"],
+      "is_exploration": false
+    },
+    {
+      "id": "article-6",
+      "title": "开源 Agent 框架持续演进，工作流编排开始分层",
+      "priority": "normal",
+      "time_label": "今天",
+      "source": "开源社区观察",
+      "url": "https://github.com/trending",
+      "summary": {
+        "what_happened": "新一轮开源 Agent 框架更强调状态管理、任务拆分、人工介入和可观测性，而不是只做链式调用。",
+        "why_it_matters": "这说明社区已经开始从 demo 时代进入工程化时代。"
+      },
+      "relevance": "如果你要自己搭 Agent，框架选型应优先看可观测性、恢复能力和接入成本。",
+      "tags": ["#开源", "#Agent", "#工程化"],
+      "is_exploration": false
+    },
+    {
+      "id": "article-7",
+      "title": "AI 编程平台开始把审计、审批和安全扫描前移",
+      "priority": "normal",
+      "time_label": "今天",
+      "source": "开发工具行业观察",
+      "url": "https://news.ycombinator.com/",
+      "summary": {
+        "what_happened": "越来越多 AI 编程工具开始把权限控制、变更审计、测试门禁和安全扫描并入主流程。",
+        "why_it_matters": "提效不是终点，团队最终比拼的是能否在放大产能时仍守住质量边界。"
+      },
+      "relevance": "这和你的落地实践直接相关，特别是在多人协作和生产代码场景。",
+      "tags": ["#AI编程", "#安全", "#工程效率"],
+      "is_exploration": false
+    },
+    {
+      "id": "article-8",
+      "title": "Agent 驱动的办公套件竞争正在加速",
+      "priority": "normal",
+      "time_label": "今天",
+      "source": "行业趋势观察",
+      "url": "https://www.theverge.com/ai-artificial-intelligence",
+      "summary": {
+        "what_happened": "办公入口层的厂商都在尝试把 Agent 从问答助手升级为任务执行者，例如整理资料、生成文档和推进流程。",
+        "why_it_matters": "真正的用户价值会体现在跨工具协同与默认入口控制权上。"
+      },
+      "relevance": "如果你做产品或工具，这会影响你的集成策略与分发策略。",
+      "tags": ["#AI应用", "#办公协同", "#Agent"],
+      "is_exploration": true
+    }
+  ],
+  "data_sources": ["OpenAI", "Google Workspace", "Anthropic", "NVIDIA", "Microsoft", "GitHub Trending", "行业观察"]
+}

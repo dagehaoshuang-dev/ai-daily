@@ -133,7 +133,7 @@ AI 作为"总编辑"，从采集到的全部资讯中做以下决策：
 
 #### 日报中间数据契约
 
-在生成 HTML 前，先在心中整理出统一的 article 数据结构；不要边写 HTML 边临时决定字段。每条资讯至少应包含：
+在方案二中，AI **先生成结构化 JSON，再调用脚本渲染 HTML**。不要边写 HTML 边临时决定字段。每条资讯至少应包含：
 
 ```json
 {
@@ -161,21 +161,38 @@ AI 作为"总编辑"，从采集到的全部资讯中做以下决策：
 - `summary.what_happened` 和 `summary.why_it_matters` 必须都存在
 - 拓展阅读需额外标记 `is_exploration: true`
 
+完整 payload 需包含：
+- `meta`：日期、角色、生成时间等顶层信息
+- `left_sidebar.overview`
+- `left_sidebar.actions`
+- `left_sidebar.trends`
+- `articles`
+- `data_sources`
+
+可直接参考：`reference/daily_payload_example.json`
+
 ### 第四步：AI 生成 HTML
 
-**由 AI 直接生成完整的 HTML 文件**，不使用脚本拼装。AI 需要根据第三步整理的资讯数据和第四步的结构化内容，参照 `reference/daily_example.html` 成品样板的完整结构、样式和 JS，生成一份新的日报 HTML 写入 `output/daily/{date}.html`。
+**优先使用模板化渲染，不再默认由 AI 手写整页 HTML。**
+
+标准流程：
+1. AI 先生成结构化 payload，写入 `output/daily/{date}.json`
+2. 调用 `scripts/render_daily.py output/daily/{date}.json`
+3. 由脚本输出 `output/daily/{date}.html`
+
+只有在渲染脚本缺失或损坏时，才退回到直接生成完整 HTML。
 
 重要约束：
 - **不要重新设计页面结构，不要重写交互逻辑，不要删改反馈 JS 的行为。**
-- 最稳妥的方式是：**完整复用样板页结构、样式和脚本，只替换日期、角色、统计数字、左栏文案、资讯卡片内容和数据来源。**
-- 必须保留 `data-article-id`、`data-title`、`data-tags`、`data-action-prompt` 等属性，确保反馈采集和 AI 工具菜单正常工作。
+- 通过渲染脚本稳定复用样板页结构、样式和脚本，只替换日期、角色、统计数字、左栏文案、资讯卡片内容和数据来源。
+- 渲染结果必须保留 `data-article-id`、`data-title`、`data-tags`、`data-action-prompt` 等属性，确保反馈采集和 AI 工具菜单正常工作。
 - HTTP 模式下只在离开页面时提交一次完整 feedback summary；不要新增定时事件批量落盘逻辑。
 - 如果无法 100% 确认某段 JS 的作用，宁可原样保留，也不要自行改写。
 
-成品样板文件：`skills/ai-daily/reference/daily_example.html`
+成品样板文件：`reference/daily_example.html`
 - 该文件是一份已经生产验证过的完整日报页面
 - 包含完整的布局、样式、反馈 JS、AI 工具集成
-- AI 生成时应保持与样板一致的结构和交互体验，只替换实际的资讯内容
+- 渲染器应保持与样板一致的结构和交互体验，只替换实际的资讯内容
 
 #### 技术依赖
 
@@ -351,8 +368,8 @@ function onLeave() {
 
 ### 第六步：启动反馈服务
 
-1. 如果 `scripts/feedback_server.py` 不存在则创建（Python HTTP 服务，serve `output/` 目录 + `POST /api/feedback` 写入 `data/feedback/{date}.json`，端口默认 17890 冲突自动 +1，超时 2 小时自动退出）
-2. 后台启动服务：`python3 scripts/feedback_server.py &`
+1. 使用现有的 `scripts/feedback_server.py` 启动本地 HTTP 服务（serve `output/` 目录 + `POST /api/feedback` 写入 `data/feedback/{date}.json`，端口默认 17890，冲突自动 +1，超时 2 小时自动退出）
+2. 启动服务：`python3 scripts/feedback_server.py`
 3. 等待 `data/.server_port` 写入，读取端口号
 4. 用浏览器打开 `http://localhost:{port}/daily/{date}.html`
 
@@ -369,6 +386,7 @@ function onLeave() {
 | 文件 | 用途 |
 |------|------|
 | `reference/daily_example.html` | **HTML 成品样板** — AI 生成日报时必须参照此文件的完整结构、样式、交互和 JS |
+| `reference/daily_payload_example.json` | **日报 payload 示例** — 方案二中 AI 生成 JSON 时应参考此结构 |
 | `reference/profile_template.yaml` | 用户兴趣配置模板 — 首次引导时参照生成 `config/profile.yaml` |
 | `reference/feedback_schema.json` | 反馈数据 JSON Schema — 定义 `data/feedback/{date}.json` 的完整结构 |
 
@@ -376,9 +394,10 @@ function onLeave() {
 
 | 文件 | 用途 | 调用方式 |
 |------|------|---------|
+| `scripts/render_daily.py` | 将 `output/daily/{date}.json` 稳定渲染为 HTML | `python3 scripts/render_daily.py output/daily/{date}.json` |
 | `scripts/feedback_server.py` | HTTP 静态服务 + 反馈接收，超时自动退出 | 后台运行 |
 
-注意：**采集、加工、HTML 生成全部由 AI 完成**。脚本只负责反馈收集服务（网络 IO）。
+注意：**采集、加工、筛选、摘要、行动建议由 AI 完成；HTML 结构输出优先由渲染脚本完成。** 脚本负责稳定渲染和反馈收集服务。
 
 ## AI 与脚本的职责分工
 
@@ -390,9 +409,11 @@ function onLeave() {
 | 资讯抓取 | AI（调用搜索工具）| 需要根据搜索结果质量动态调整策略 |
 | 筛选、排序、分级 | AI | 需要编辑判断力，不能用评分公式替代 |
 | 摘要、解读、行动建议 | AI | 需要基于用户角色的语境理解 |
-| HTML 生成 | AI（参照样板）| 内容是动态的，需要 AI 组装 |
+| 结构化 payload 生成 | AI | 内容是动态的，需要 AI 生成当天的结构化数据 |
+| HTML 渲染 | 脚本（`render_daily.py`） | 页面结构、样式和反馈 JS 需要稳定复用，避免模型每次重写整页 |
 | 兴趣漂移检测 | AI | 需要对比 profile 和行为数据的差异 |
 | 反馈数据收集 | 脚本（HTTP 服务）| 纯网络 IO，无需 AI 介入 |
+
 #### HTML 生成前自检
 
 在写出最终 HTML 前，至少自检以下几点：

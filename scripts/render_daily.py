@@ -1,0 +1,649 @@
+#!/usr/bin/env python3
+"""
+AI 日报 HTML 渲染器
+
+输入：output/daily/{date}.json
+输出：output/daily/{date}.html
+
+目标：让 AI 只负责生成结构化日报数据，由脚本负责稳定输出 HTML，
+避免每次都由模型重写整页结构、样式和反馈脚本。
+"""
+from __future__ import annotations
+
+import argparse
+import json
+from datetime import datetime
+from html import escape
+from pathlib import Path
+from typing import Any
+
+
+ROOT_DIR = Path(__file__).resolve().parent.parent
+OUTPUT_DIR = ROOT_DIR / "output" / "daily"
+
+PRIORITY_ICON = {
+    "major": '<i class="fa-solid fa-fire text-red-500 mr-1.5 text-xs"></i>',
+    "notable": '<i class="fa-solid fa-thumbtack text-amber-500 mr-1.5 text-xs"></i>',
+    "normal": "",
+}
+
+ACTION_META = {
+    "learn": {
+        "label": "建议学习",
+        "icon": "fa-solid fa-book-open",
+        "icon_class": "text-blue-500",
+        "title_class": "text-blue-600",
+    },
+    "try": {
+        "label": "建议尝试",
+        "icon": "fa-solid fa-wrench",
+        "icon_class": "text-emerald-500",
+        "title_class": "text-emerald-600",
+    },
+    "watch": {
+        "label": "持续关注",
+        "icon": "fa-solid fa-eye",
+        "icon_class": "text-amber-500",
+        "title_class": "text-amber-600",
+    },
+    "alert": {
+        "label": "需要警惕",
+        "icon": "fa-solid fa-triangle-exclamation",
+        "icon_class": "text-red-500",
+        "title_class": "text-red-600",
+    },
+}
+
+TREND_META = {
+    "rising": {
+        "label": "上升",
+        "icon": "fa-solid fa-arrow-trend-up",
+        "icon_class": "text-emerald-500",
+        "label_class": "text-emerald-600",
+        "tag_class": "bg-emerald-50 text-emerald-700",
+    },
+    "cooling": {
+        "label": "消退",
+        "icon": "fa-solid fa-arrow-trend-down",
+        "icon_class": "text-gray-400",
+        "label_class": "text-gray-500",
+        "tag_class": "bg-gray-50 text-gray-500",
+    },
+    "steady": {
+        "label": "持续",
+        "icon": "fa-solid fa-fire",
+        "icon_class": "text-red-500",
+        "label_class": "text-red-600",
+        "tag_class": "bg-red-50 text-red-600",
+    },
+}
+
+
+def h(value: Any) -> str:
+    return escape("" if value is None else str(value), quote=True)
+
+
+def join_html(parts: list[str]) -> str:
+    return "\n".join(part for part in parts if part)
+
+
+def render_date_label(meta: dict[str, Any]) -> str:
+    label = meta.get("date_label")
+    if label:
+        return h(label)
+    date_str = meta.get("date")
+    if not date_str:
+        return ""
+    try:
+        dt = datetime.strptime(date_str, "%Y-%m-%d")
+        weekdays = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
+        return f"{dt.year}年{dt.month}月{dt.day}日 · {weekdays[dt.weekday()]}"
+    except ValueError:
+        return h(date_str)
+
+
+def render_tags(tags: list[str], exploration: bool = False) -> str:
+    classes = "bg-gray-100 text-gray-500" if exploration else "bg-[#F3F0FF] text-accent"
+    return "".join(
+        f'<span class="{classes} text-[11px] px-2.5 py-0.5 rounded-full">{h(tag)}</span>'
+        for tag in tags
+    )
+
+
+def render_summary(summary: dict[str, Any] | str) -> str:
+    if isinstance(summary, dict):
+        what_happened = h(summary.get("what_happened", ""))
+        why_it_matters = h(summary.get("why_it_matters", ""))
+        parts = []
+        if what_happened:
+            parts.append(
+                '<p class="mb-0.5"><strong class="text-gray-700">发生了什么：</strong>'
+                f"{what_happened}</p>"
+            )
+        if why_it_matters:
+            parts.append(
+                '<p><strong class="text-gray-700">为什么重要：</strong>'
+                f"{why_it_matters}</p>"
+            )
+        return join_html(parts)
+    return h(summary)
+
+
+def render_article(article: dict[str, Any], index: int) -> str:
+    article_id = article.get("id") or f"article-{index}"
+    exploration = bool(article.get("is_exploration"))
+    priority = article.get("priority", "normal")
+    border = " border border-dashed border-gray-200" if exploration else ""
+    icon = PRIORITY_ICON.get(priority, "")
+    title = h(article.get("title", ""))
+    time_label = h(article.get("time_label", ""))
+    source = h(article.get("source", ""))
+    url = h(article.get("url", "#"))
+    relevance = h(article.get("relevance", ""))
+    tags = article.get("tags", [])
+    title_prefix = (
+        '<i class="fa-solid fa-compass text-gray-400 mr-1.5 text-xs"></i>'
+        '<span class="text-gray-400 text-[11px] font-normal mr-1.5">拓展</span>'
+        if exploration
+        else icon
+    )
+    relevance_block = ""
+    if relevance:
+        relevance_block = (
+            '<div class="bg-[#F8F7FF] rounded-lg px-3 py-2 text-[13px] text-gray-700 my-2">'
+            '<i class="fa-solid fa-lightbulb text-accent mr-1"></i>'
+            f"<strong>与你相关：</strong>{relevance}</div>"
+        )
+
+    return f"""        <article class="bg-white rounded-xl shadow-sm p-4 card-hover{border}"
+                 data-article-id="{h(article_id)}" data-title="{title}" data-tags='{json.dumps(tags, ensure_ascii=False)}'>
+          <div class="flex items-start justify-between">
+            <h3 class="text-[15px] font-semibold text-primary leading-snug">{title_prefix}{title}</h3>
+            <span class="text-xs text-gray-400 whitespace-nowrap ml-3">{time_label}</span>
+          </div>
+          <p class="text-xs text-gray-400 mt-1"><i class="fa-solid fa-link mr-1"></i>{source}</p>
+          <div class="ai-gradient-line pl-3 my-2.5 text-[13px] text-gray-600 leading-relaxed">
+            {render_summary(article.get("summary", ""))}
+          </div>
+          {relevance_block}
+          <div class="flex items-center justify-between mt-2">
+            <div class="flex gap-1.5 flex-wrap">{render_tags(tags, exploration=exploration)}</div>
+            <a href="{url}" target="_blank" class="text-accent text-xs hover:underline">
+              <i class="fa-solid fa-arrow-up-right-from-square mr-1"></i>原文
+            </a>
+          </div>
+        </article>"""
+
+
+def render_overview(items: list[dict[str, Any]]) -> str:
+    lines = []
+    for idx, item in enumerate(items, start=1):
+        lines.append(
+            f"""            <li class="flex gap-2.5 items-start">
+              <span class="flex-shrink-0 w-5 h-5 rounded-full bg-accent text-white text-[10px] font-bold flex items-center justify-center mt-0.5">{idx}</span>
+              <span class="text-gray-700"><strong class="text-primary">{h(item.get("title", ""))}</strong>：{h(item.get("text", ""))}</span>
+            </li>"""
+        )
+    return join_html(lines)
+
+
+def render_actions(items: list[dict[str, Any]]) -> str:
+    lines = []
+    for item in items:
+        meta = ACTION_META[item.get("type", "watch")]
+        lines.append(
+            f"""            <li class="action-item flex items-start gap-2.5 ai-bg rounded-lg px-3 py-2.5"
+                data-action-type="{h(item.get("type", "watch"))}"
+                data-action-prompt="{h(item.get("prompt", ""))}">
+              <i class="{meta["icon"]} {meta["icon_class"]} mt-0.5 text-sm"></i>
+              <div class="flex-1">
+                <strong class="{meta["title_class"]}">{meta["label"]}</strong>
+                <p class="text-gray-600 mt-0.5 leading-relaxed">{h(item.get("text", ""))}</p>
+              </div>
+            </li>"""
+        )
+    return join_html(lines)
+
+
+def render_trends(trends: dict[str, Any]) -> str:
+    blocks = []
+    for key in ("rising", "cooling", "steady"):
+        meta = TREND_META[key]
+        tags = "".join(
+            f'<span class="{meta["tag_class"]} text-[11px] px-2 py-0.5 rounded-full">{h(tag)}</span>'
+            for tag in trends.get(key, [])
+        )
+        blocks.append(
+            f"""            <div class="flex items-center gap-2">
+              <span class="flex-shrink-0 w-12 text-right"><i class="{meta["icon"]} {meta["icon_class"]} text-xs mr-0.5"></i><strong class="{meta["label_class"]} text-[11px]">{meta["label"]}</strong></span>
+              <div class="flex gap-1.5 flex-wrap">{tags}</div>
+            </div>"""
+        )
+
+    insight = h(trends.get("insight", ""))
+    blocks.append(
+        '          <div class="ai-bg rounded-lg px-3 py-3">'
+        '            <p class="text-[12px] text-gray-600 leading-relaxed">'
+        '              <i class="fa-solid fa-wand-magic-sparkles text-accent mr-1"></i>'
+        f'              <strong class="text-primary">AI 洞察：</strong>{insight}'
+        "            </p>"
+        "          </div>"
+    )
+    return join_html(blocks)
+
+
+def render_html(payload: dict[str, Any]) -> str:
+    meta = payload["meta"]
+    left = payload["left_sidebar"]
+    articles = payload["articles"]
+    article_items = "\n".join(
+        render_article(article, index) for index, article in enumerate(articles, start=1)
+    )
+    data_sources = h("、".join(payload.get("data_sources", [])))
+    title_date = h(meta["date"])
+    date_label = render_date_label(meta)
+    item_count = len(articles)
+    generated_at = h(meta.get("generated_at", ""))
+    role = h(meta.get("role", ""))
+    generated_time = h(meta.get("generated_time", ""))
+
+    return f"""<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI 日报 · {title_date}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {{
+      theme: {{
+        extend: {{
+          colors: {{
+            primary: '#1A1A2E',
+            accent: '#6C5CE7',
+            'accent-hover': '#5A4BD1',
+          }}
+        }}
+      }}
+    }}
+  </script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <style>
+    .ai-gradient-line {{ border-left: 3px solid; border-image: linear-gradient(to bottom, #6C5CE7, #3B82F6) 1; }}
+    .ai-bg {{ background: linear-gradient(135deg, #F8F7FF, #F0F7FF); }}
+    body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans SC", sans-serif; }}
+    .card-hover {{ transition: box-shadow 0.2s ease, transform 0.2s ease; }}
+    .card-hover:hover {{ box-shadow: 0 4px 12px rgba(0,0,0,0.1); transform: translateY(-1px); }}
+    .sidebar-scroll::-webkit-scrollbar {{ width: 4px; }}
+    .sidebar-scroll::-webkit-scrollbar-track {{ background: transparent; }}
+    .sidebar-scroll::-webkit-scrollbar-thumb {{ background: #E5E7EB; border-radius: 2px; }}
+    .feed-scroll::-webkit-scrollbar {{ width: 5px; }}
+    .feed-scroll::-webkit-scrollbar-track {{ background: transparent; }}
+    .feed-scroll::-webkit-scrollbar-thumb {{ background: #E5E7EB; border-radius: 3px; }}
+
+    .vote-btn, .bookmark-btn {{ cursor: pointer; user-select: none; transition: all 0.2s ease; }}
+    .vote-btn:hover {{ color: #6C5CE7; }}
+    .vote-btn.voted {{ color: #6C5CE7; font-weight: 600; }}
+    .bookmark-btn:hover {{ color: #F59E0B; }}
+    .bookmark-btn.bookmarked {{ color: #F59E0B; }}
+    .tag-clickable {{ cursor: pointer; transition: all 0.15s ease; }}
+    .tag-clickable:hover {{ transform: scale(1.05); box-shadow: 0 1px 4px rgba(108,92,231,0.2); }}
+    .tag-clickable.tag-clicked {{ background: #6C5CE7 !important; color: white !important; }}
+
+    .action-item {{ position: relative; }}
+    .ai-trigger-wrap {{
+      position: absolute; top: 4px; right: 4px;
+      display: flex; align-items: flex-start; z-index: 50;
+      pointer-events: none;
+    }}
+    .ai-trigger-icon {{
+      width: 26px; height: 26px; border-radius: 6px;
+      display: flex; align-items: center; justify-content: center;
+      color: #C4B5FD; font-size: 12px; cursor: pointer;
+      transition: all 0.15s ease; flex-shrink: 0;
+      pointer-events: auto;
+    }}
+    .ai-trigger-icon:hover {{ background: #6C5CE7; color: white; }}
+    .ai-menu {{
+      background: white; border-radius: 10px;
+      box-shadow: 0 8px 30px rgba(0,0,0,0.12), 0 1px 3px rgba(0,0,0,0.06);
+      padding: 6px; min-width: 156px;
+      opacity: 0; pointer-events: none;
+      transform: translateX(8px);
+      transition: opacity 0.18s ease, transform 0.18s ease;
+      margin-right: 4px;
+    }}
+    .ai-menu.open {{ opacity: 1; pointer-events: auto; transform: translateX(0); }}
+    .ai-menu-item {{
+      display: flex; align-items: center; gap: 8px;
+      padding: 7px 12px; border-radius: 7px; font-size: 12px;
+      color: #4B5563; cursor: pointer; transition: background 0.12s ease; white-space: nowrap;
+    }}
+    .ai-menu-item:hover {{ background: #F5F3FF; color: #6C5CE7; }}
+    .ai-menu-item i {{ width: 16px; text-align: center; font-size: 13px; }}
+    .ai-menu-item .item-icon-claude {{ color: #C96E2B; }}
+    .ai-menu-item .item-icon-chatgpt {{ color: #0FA47F; }}
+    .ai-menu-item .item-icon-deepseek {{ color: #2563EB; }}
+    .ai-menu-item .item-icon-copy {{ color: #9CA3AF; }}
+    .ai-menu-sep {{ height: 1px; background: #F3F4F6; margin: 4px 8px; }}
+
+    .card-ai-wrap {{ position: relative; flex-shrink: 0; }}
+    .card-ai-wrap .ai-menu {{ position: absolute; bottom: calc(100% + 6px); right: 0; margin-right: 0; }}
+    .card-ai-btn {{
+      display: inline-flex; align-items: center; gap: 3px;
+      padding: 2px 8px; border-radius: 6px; font-size: 11px;
+      cursor: pointer; transition: all 0.15s ease; color: #C4B5FD; white-space: nowrap;
+    }}
+    .card-ai-btn:hover {{ background: #6C5CE7; color: white; }}
+
+    .toast {{
+      position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(80px);
+      background: #1A1A2E; color: white; padding: 10px 20px; border-radius: 10px;
+      font-size: 13px; z-index: 9999; transition: transform 0.3s ease, opacity 0.3s ease; opacity: 0;
+    }}
+    .toast.show {{ transform: translateX(-50%) translateY(0); opacity: 1; }}
+  </style>
+</head>
+<body class="bg-[#FAFBFC] text-primary h-screen overflow-hidden flex flex-col">
+
+  <header class="flex-shrink-0 bg-white border-b border-gray-100 px-8 py-4">
+    <div class="flex items-center justify-between max-w-[1600px] mx-auto">
+      <div class="flex items-center gap-4">
+        <h1 class="text-2xl font-bold text-primary"><i class="fa-solid fa-robot text-accent mr-2"></i>你的 AI 日报</h1>
+        <span class="text-gray-300">|</span>
+        <p class="text-gray-500 text-sm"><i class="fa-regular fa-calendar mr-1"></i>{date_label}</p>
+        <span class="bg-accent/10 text-accent text-xs font-medium px-2.5 py-1 rounded-full">{item_count} 条资讯</span>
+      </div>
+      <div class="flex items-center gap-4">
+        <span class="text-gray-400 text-xs"><i class="fa-regular fa-clock mr-1"></i>生成于 {generated_time}</span>
+        <span class="inline-block bg-[#F3F0FF] text-accent text-xs font-medium px-3 py-1.5 rounded-full"><i class="fa-solid fa-user mr-1"></i>{role}</span>
+      </div>
+    </div>
+  </header>
+
+  <div class="flex-1 flex overflow-hidden max-w-[1600px] mx-auto w-full">
+
+    <aside class="w-[420px] flex-shrink-0 border-r border-gray-100 bg-white overflow-y-auto sidebar-scroll">
+      <div class="p-5 space-y-5">
+
+        <section>
+          <h2 class="text-base font-semibold text-primary mb-3 flex items-center">
+            <span class="w-6 h-6 rounded-md bg-accent/10 flex items-center justify-center mr-2"><i class="fa-solid fa-bolt text-accent text-[10px]"></i></span>今日速览
+          </h2>
+          <ol class="space-y-3 text-[13px] leading-relaxed">
+{render_overview(left.get("overview", []))}
+          </ol>
+        </section>
+
+        <hr class="border-gray-100">
+
+        <section>
+          <h2 class="text-base font-semibold text-primary mb-3 flex items-center">
+            <span class="w-6 h-6 rounded-md bg-accent/10 flex items-center justify-center mr-2"><i class="fa-solid fa-bullseye text-accent text-[10px]"></i></span>今日行动建议
+          </h2>
+          <ul class="space-y-2.5 text-[13px]">
+{render_actions(left.get("actions", []))}
+          </ul>
+        </section>
+
+        <hr class="border-gray-100">
+
+        <section>
+          <h2 class="text-base font-semibold text-primary mb-3 flex items-center">
+            <span class="w-6 h-6 rounded-md bg-accent/10 flex items-center justify-center mr-2"><i class="fa-solid fa-chart-line text-accent text-[10px]"></i></span>趋势雷达
+          </h2>
+          <div class="space-y-2 text-[13px] mb-3">
+{render_trends(left.get("trends", {}))}
+          </div>
+        </section>
+
+      </div>
+    </aside>
+
+    <main class="flex-1 overflow-y-auto feed-scroll px-8 py-6 min-w-0">
+      <h2 class="text-lg font-semibold text-primary mb-4 flex items-center">
+        <span class="w-7 h-7 rounded-lg bg-accent/10 flex items-center justify-center mr-2.5"><i class="fa-solid fa-newspaper text-accent text-xs"></i></span>
+        今日资讯<span class="text-xs text-gray-400 font-normal ml-3">按相关度排序 · 共 {item_count} 条</span>
+      </h2>
+      <div class="space-y-3">
+{article_items}
+      </div>
+      <div class="text-center text-xs text-gray-400 mt-6 pb-4">
+        数据来源：{data_sources}<br>
+        生成时间 {generated_at}
+      </div>
+    </main>
+  </div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+(function() {{
+  'use strict';
+  const DATE = '{title_date}';
+  const IS_HTTP = location.protocol.startsWith('http');
+  const events = [];
+  const cardTimers = {{}};
+  const cardDwellTime = {{}};
+  const pageLoadTime = Date.now();
+
+  const AI_TOOLS = [
+    {{ id: 'claude', name: 'Claude', icon: 'fa-solid fa-message', btnClass: 'btn-claude', url: 'https://claude.ai/new?q={{prompt}}' }},
+    {{ id: 'chatgpt', name: 'ChatGPT', icon: 'fa-brands fa-openai', btnClass: 'btn-chatgpt', url: 'https://chatgpt.com/?q={{prompt}}' }},
+    {{ id: 'deepseek', name: 'DeepSeek', icon: 'fa-solid fa-magnifying-glass', btnClass: 'btn-deepseek', url: 'https://chat.deepseek.com/?q={{prompt}}' }},
+    {{ id: 'copy', name: '复制 Prompt', icon: 'fa-regular fa-copy', btnClass: 'btn-copy', url: null }}
+  ];
+
+  function ts() {{ return new Date().toISOString(); }}
+  function log(event) {{ events.push(event); console.log('%c[反馈]%c ' + event.type, 'color:#6C5CE7;font-weight:bold', 'color:#333', event); }}
+  function showToast(msg, dur) {{ const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), dur || 2000); }}
+
+  function sendToAI(tool, prompt) {{
+    if (tool.id === 'copy') {{ navigator.clipboard.writeText(prompt).then(() => showToast('Prompt 已复制到剪贴板')); }}
+    else {{ window.open(tool.url.replace('{{prompt}}', encodeURIComponent(prompt)), '_blank'); showToast('已发送至 ' + tool.name); }}
+    log({{ type: 'send_to_ai', tool: tool.id, prompt: prompt.substring(0, 100) + '...', timestamp: ts() }});
+  }}
+
+  function showAIMenu(anchor, prompt) {{
+    document.querySelectorAll('.ai-menu').forEach(m => m.classList.remove('open'));
+    const menu = document.createElement('div'); menu.className = 'ai-menu open';
+    AI_TOOLS.forEach((tool, i) => {{
+      if (i > 0 && tool.id === 'copy') menu.insertAdjacentHTML('beforeend', '<div class="ai-menu-sep"></div>');
+      const item = document.createElement('div'); item.className = 'ai-menu-item';
+      item.innerHTML = '<i class="' + tool.icon + ' item-icon-' + tool.id + '"></i><span>' + tool.name + '</span>';
+      item.addEventListener('click', e => {{ e.stopPropagation(); sendToAI(tool, prompt); menu.remove(); }});
+      menu.appendChild(item);
+    }});
+    anchor.style.position = 'relative'; anchor.appendChild(menu);
+    setTimeout(() => {{ const close = e => {{ if (!menu.contains(e.target)) {{ menu.remove(); document.removeEventListener('click', close); }} }}; document.addEventListener('click', close); }}, 0);
+  }}
+
+  const cards = document.querySelectorAll('main article.card-hover');
+  cards.forEach((card, i) => {{
+    const h3 = card.querySelector('h3'); if (!h3) return;
+    const title = h3.textContent.trim().replace(/^[^\\w\\u4e00-\\u9fff]+/, '');
+    const id = card.dataset.articleId || ('article-' + (i + 1));
+    card.dataset.articleId = id; card.dataset.title = title;
+    const tagEls = card.querySelectorAll('span[class*=\"rounded-full\"]');
+    const tags = [];
+    tagEls.forEach(t => {{
+      const text = t.textContent.trim();
+      if (text.startsWith('#')) {{ tags.push(text); t.classList.add('tag-clickable');
+        t.addEventListener('click', function() {{ const w = this.classList.toggle('tag-clicked'); log({{ type: w ? 'tag_follow' : 'tag_unfollow', tag: text, articleId: id, title, timestamp: ts() }}); }});
+      }}
+    }});
+    card.dataset.tags = JSON.stringify(tags);
+    const actionBar = card.querySelector('.flex.items-center.justify-between.mt-2');
+    if (actionBar) {{
+      const btnGroup = document.createElement('span'); btnGroup.className = 'flex items-center gap-3 ml-auto mr-3';
+      btnGroup.innerHTML = '<span class=\"vote-btn flex items-center gap-1 text-gray-400 text-xs\" data-voted=\"false\"><i class=\"fa-solid fa-caret-up text-sm\"></i><span class=\"vote-count\">0</span></span><span class=\"bookmark-btn text-gray-300 text-sm\" data-bookmarked=\"false\"><i class=\"fa-regular fa-bookmark\"></i></span>';
+      const sourceLink = actionBar.querySelector('a');
+      if (sourceLink) actionBar.insertBefore(btnGroup, sourceLink);
+      btnGroup.querySelector('.vote-btn').addEventListener('click', function() {{
+        const v = this.dataset.voted === 'true'; this.dataset.voted = v ? 'false' : 'true'; this.classList.toggle('voted'); this.querySelector('.vote-count').textContent = v ? '0' : '1';
+        log({{ type: v ? 'unvote' : 'vote', articleId: id, title, tags, timestamp: ts() }});
+      }});
+      btnGroup.querySelector('.bookmark-btn').addEventListener('click', function() {{
+        const m = this.dataset.bookmarked === 'true'; this.dataset.bookmarked = m ? 'false' : 'true'; this.classList.toggle('bookmarked');
+        this.querySelector('i').className = m ? 'fa-regular fa-bookmark' : 'fa-solid fa-bookmark';
+        log({{ type: m ? 'unbookmark' : 'bookmark', articleId: id, title, tags, timestamp: ts() }});
+      }});
+    }}
+  }});
+
+  document.querySelectorAll('.action-item').forEach(item => {{
+    const prompt = item.dataset.actionPrompt; if (!prompt) return;
+    const wrap = document.createElement('div'); wrap.className = 'ai-trigger-wrap';
+    const menu = document.createElement('div'); menu.className = 'ai-menu';
+    AI_TOOLS.forEach((tool, i) => {{
+      if (i > 0 && tool.id === 'copy') menu.insertAdjacentHTML('beforeend', '<div class=\"ai-menu-sep\"></div>');
+      const mi = document.createElement('div'); mi.className = 'ai-menu-item';
+      mi.innerHTML = '<i class=\"' + tool.icon + ' item-icon-' + tool.id + '\"></i><span>' + tool.name + '</span>';
+      mi.addEventListener('click', e => {{ e.stopPropagation(); sendToAI(tool, prompt); }});
+      menu.appendChild(mi);
+    }});
+    wrap.appendChild(menu);
+    const icon = document.createElement('span'); icon.className = 'ai-trigger-icon';
+    icon.innerHTML = '<i class=\"fa-solid fa-paper-plane\"></i>'; icon.title = '发送至 AI 工具';
+    wrap.appendChild(icon); item.appendChild(wrap);
+    let ht = null;
+    function show() {{ clearTimeout(ht); menu.classList.add('open'); }}
+    function hide() {{ ht = setTimeout(() => menu.classList.remove('open'), 150); }}
+    icon.addEventListener('mouseenter', show); icon.addEventListener('mouseleave', hide);
+    menu.addEventListener('mouseenter', show); menu.addEventListener('mouseleave', hide);
+  }});
+
+  cards.forEach(card => {{
+    const title = card.dataset.title; const tags = JSON.parse(card.dataset.tags || '[]');
+    const se = card.querySelector('.ai-gradient-line'); const s = se ? se.textContent.trim().substring(0, 200) : '';
+    const re = card.querySelector('[class*=\"F8F7FF\"]'); const r = re ? re.textContent.trim() : '';
+    const dp = '我在阅读 AI 日报时看到了这条资讯，请帮我深入分析：\\n\\n标题：' + title + '\\n标签：' + tags.join(' ') + '\\n摘要：' + s + '\\n' + (r ? '与我的关联：' + r + '\\n' : '') + '\\n请从以下角度展开：\\n1. 技术细节和背景\\n2. 短期和长期影响\\n3. 我应如何应对\\n4. 推荐学习资源';
+    const ab = card.querySelector('.flex.items-center.justify-between.mt-2');
+    if (ab) {{
+      const wrap = document.createElement('span'); wrap.className = 'card-ai-wrap';
+      const icon = document.createElement('span'); icon.className = 'card-ai-btn';
+      icon.innerHTML = '<i class=\"fa-solid fa-wand-magic-sparkles text-[10px]\"></i>AI 深入'; wrap.appendChild(icon);
+      const menu = document.createElement('div'); menu.className = 'ai-menu';
+      AI_TOOLS.forEach((tool, i) => {{
+        if (i > 0 && tool.id === 'copy') menu.insertAdjacentHTML('beforeend', '<div class=\"ai-menu-sep\"></div>');
+        const mi = document.createElement('div'); mi.className = 'ai-menu-item';
+        mi.innerHTML = '<i class=\"' + tool.icon + ' item-icon-' + tool.id + '\"></i><span>' + tool.name + '</span>';
+        mi.addEventListener('click', e => {{ e.stopPropagation(); sendToAI(tool, dp); }});
+        menu.appendChild(mi);
+      }});
+      wrap.appendChild(menu);
+      let ht = null;
+      function show() {{ clearTimeout(ht); menu.classList.add('open'); }}
+      function hide() {{ ht = setTimeout(() => menu.classList.remove('open'), 150); }}
+      icon.addEventListener('mouseenter', show); icon.addEventListener('mouseleave', hide);
+      menu.addEventListener('mouseenter', show); menu.addEventListener('mouseleave', hide);
+      const sl = ab.querySelector('a'); if (sl) ab.insertBefore(wrap, sl);
+    }}
+  }});
+
+  const fc = document.querySelector('main.feed-scroll');
+  if (fc) {{
+    const obs = new IntersectionObserver(entries => {{
+      entries.forEach(e => {{ const c = e.target, id = c.dataset.articleId; if (!id) return;
+        if (e.isIntersecting) {{ cardTimers[id] = Date.now(); }} else if (cardTimers[id]) {{
+          const el = Date.now() - cardTimers[id]; cardDwellTime[id] = (cardDwellTime[id] || 0) + el; delete cardTimers[id];
+          if (el > 5000) log({{ type: 'dwell', articleId: id, title: c.dataset.title, tags: JSON.parse(c.dataset.tags || '[]'), duration_ms: el, timestamp: ts() }});
+        }}
+      }});
+    }}, {{ root: fc, threshold: 0.5 }});
+    cards.forEach(c => obs.observe(c));
+  }}
+
+  document.querySelectorAll('main a[target=\"_blank\"]').forEach(l => {{
+    l.addEventListener('click', function() {{ const c = this.closest('article[data-article-id]');
+      if (c) log({{ type: 'click_source', articleId: c.dataset.articleId, title: c.dataset.title, tags: JSON.parse(c.dataset.tags || '[]'), url: this.href, timestamp: ts() }});
+    }});
+  }});
+
+  document.addEventListener('copy', function() {{
+    const s = window.getSelection(); if (!s || !s.anchorNode) return;
+    const c = s.anchorNode.parentElement?.closest('article[data-article-id]');
+    if (c) log({{ type: 'copy', articleId: c.dataset.articleId, title: c.dataset.title, tags: JSON.parse(c.dataset.tags || '[]'), copiedText: s.toString().substring(0, 100), timestamp: ts() }});
+  }});
+
+  function buildSummary() {{
+    Object.keys(cardTimers).forEach(id => {{ cardDwellTime[id] = (cardDwellTime[id] || 0) + (Date.now() - cardTimers[id]); }});
+    const totalTime = Math.round((Date.now() - pageLoadTime) / 1000);
+    const voted = events.filter(e => e.type === 'vote').map(e => ({{ id: e.articleId, title: e.title, tags: e.tags }}));
+    const bookmarked = events.filter(e => e.type === 'bookmark').map(e => ({{ id: e.articleId, title: e.title, tags: e.tags }}));
+    const tagFollows = [...new Set(events.filter(e => e.type === 'tag_follow').map(e => e.tag))];
+    const tagUnfollows = [...new Set(events.filter(e => e.type === 'tag_unfollow').map(e => e.tag))];
+    const clicked = events.filter(e => e.type === 'click_source').map(e => ({{ id: e.articleId, title: e.title }}));
+    const copied = events.filter(e => e.type === 'copy').map(e => ({{ id: e.articleId, title: e.title }}));
+    const aiUsage = events.filter(e => e.type === 'send_to_ai');
+    const aiCounts = {{}}; aiUsage.forEach(u => {{ aiCounts[u.tool] = (aiCounts[u.tool] || 0) + 1; }});
+    const dwellRanking = Object.entries(cardDwellTime).map(([id, ms]) => {{
+      const c = document.querySelector(`[data-article-id=\"${{id}}\"]`);
+      return {{ articleId: id, title: c ? c.dataset.title : id, tags: c ? JSON.parse(c.dataset.tags || '[]') : [], dwell_seconds: Math.round(ms / 1000) }};
+    }}).filter(d => d.dwell_seconds > 0).sort((a, b) => b.dwell_seconds - a.dwell_seconds);
+    const tagScores = {{}};
+    function addTS(tags, w) {{ (tags || []).forEach(t => {{ tagScores[t] = (tagScores[t] || 0) + w; }}); }}
+    voted.forEach(v => addTS(v.tags, 3)); bookmarked.forEach(b => addTS(b.tags, 3));
+    tagFollows.forEach(t => {{ tagScores[t] = (tagScores[t] || 0) + 2; }});
+    dwellRanking.forEach(d => {{ if (d.dwell_seconds >= 5) addTS(d.tags, 1); }});
+    const tagRanking = Object.entries(tagScores).sort((a, b) => b[1] - a[1]).map(([tag, score]) => ({{ tag, score }}));
+    return {{
+      date: DATE,
+      session: {{ total_time_seconds: totalTime, total_events: events.length, page_load: new Date(pageLoadTime).toISOString() }},
+      explicit_feedback: {{ voted, bookmarked, tags_followed: tagFollows, tags_unfollowed: tagUnfollows }},
+      implicit_feedback: {{ dwell_ranking: dwellRanking, articles_clicked: clicked, articles_copied: copied }},
+      ai_interaction: {{ tools_used: aiCounts, detail: aiUsage.map(u => ({{ tool: u.tool, prompt_preview: u.prompt }})) }},
+      interest_profile: {{ tag_scores: tagRanking, top_interests: tagRanking.slice(0, 5).map(t => t.tag) }},
+      all_events: events
+    }};
+  }}
+
+  function onLeave() {{
+    const summary = buildSummary();
+    if (IS_HTTP) navigator.sendBeacon('/api/feedback', JSON.stringify(summary));
+    try {{ const st = JSON.parse(localStorage.getItem('ai_daily_feedback') || '[]'); st.push(summary); if (st.length > 30) st.splice(0, st.length - 30); localStorage.setItem('ai_daily_feedback', JSON.stringify(st)); }} catch(e) {{}}
+    console.log('\\n%c╔══════════════════════════════════════════════════╗', 'color:#6C5CE7');
+    console.log('%c║     AI 日报反馈汇总 · ' + DATE + '                  ║', 'color:#6C5CE7;font-weight:bold');
+    console.log('%c╚══════════════════════════════════════════════════╝', 'color:#6C5CE7');
+    console.log(JSON.stringify(summary, null, 2));
+  }}
+  document.addEventListener('visibilitychange', () => {{ if (document.visibilityState === 'hidden') onLeave(); }});
+  window.addEventListener('beforeunload', onLeave);
+
+  console.log('%c╔══════════════════════════════════════════════════╗', 'color:#6C5CE7');
+  console.log('%c║     AI 日报反馈采集已启动 · ' + DATE + '            ║', 'color:#6C5CE7;font-weight:bold');
+  console.log('%c╚══════════════════════════════════════════════════╝', 'color:#6C5CE7');
+  console.log('%c模式：' + (IS_HTTP ? 'HTTP（反馈自动回流）' : 'File（仅控制台+localStorage）'), 'color:#333;font-weight:bold');
+  console.log('  📌 隐式 — 停留时长、原文点击、文本复制');
+  console.log('  👆 显式 — 投票(▲)、收藏(🔖)、标签关注');
+  console.log('  🤖 AI — 行动建议/AI深入 发送至工具');
+  console.log('%c关闭页面时自动输出汇总\\n', 'color:#888');
+}})();
+</script>
+</body>
+</html>
+"""
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Render AI daily JSON into HTML")
+    parser.add_argument("input", help="Input JSON file path")
+    parser.add_argument(
+        "--output",
+        help="Output HTML file path; defaults to input path with .html suffix",
+    )
+    return parser.parse_args()
+
+
+def main() -> None:
+    args = parse_args()
+    input_path = Path(args.input)
+    output_path = Path(args.output) if args.output else input_path.with_suffix(".html")
+    payload = json.loads(input_path.read_text(encoding="utf-8"))
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(render_html(payload), encoding="utf-8")
+    print(f"Rendered {output_path}")
+
+
+if __name__ == "__main__":
+    main()
