@@ -204,7 +204,7 @@ history:
 
 # Runtime metadata (auto-updated each run; do not edit manually)
 runtime:
-  last_signal_update: "2026-03-23T11:30:00+08:00"   # Last successful Step 1 completion
+  last_signal_update: "2026-03-23T11:30:00+08:00"   # Updated on any Step 1 completion (full_success, partial_fetch, or business_empty)
   last_digest_run: "2026-03-23T11:35:00+08:00"       # Last successful Step 4 completion
   last_step1_result: "full_success"                   # full_success | partial_fetch | business_empty | transport_auth_failure
 ```
@@ -228,7 +228,7 @@ Defined warning codes:
 | `GROUP_CHAT_TRANSPORT_FAILURE` | `error` | `feishu_im_user_get_messages` returns transport/auth error |
 | `GROUP_CHAT_PARTIAL_FETCH` | `warning` | Pagination incomplete but ≥1 page succeeded |
 | `KB_INIT_PAGES_SKIPPED` | `info` | Some KB pages skipped during init (size/permission) |
-| `PROFILE_DEGRADED` | `warning` | Profile in `degraded` state; group chat signals not updated |
+| `PROFILE_DEGRADED` | `warning` | Emitted on every digest run while profile is in `degraded` state (not just on transition) |
 
 ### Controlled Domain Vocabulary
 
@@ -345,7 +345,7 @@ The existing `data/feedback/` HTML behavior data is **preserved** as a secondary
 | Tags are AI-specific (`#Agent`, `#开源`) | Tags are domain-specific, inferred per run from dept profile |
 | Static profile | Profile drifts daily via signal boost/decay |
 | Fixed AI sources | Sources derived from domain + `freeform_context` |
-| Single execution path | Three paths: init / daily digest / set-group |
+| Single execution path | Three path families: init / daily digest / control commands |
 
 ---
 
