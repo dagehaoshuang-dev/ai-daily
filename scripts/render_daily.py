@@ -11,6 +11,7 @@ AI 日报 HTML 渲染器
 from __future__ import annotations
 
 import argparse
+import base64
 import json
 from datetime import datetime
 from html import escape
@@ -83,6 +84,11 @@ def h(value: Any) -> str:
     return escape("" if value is None else str(value), quote=True)
 
 
+def serialize_tags_attr(tags: list[str]) -> str:
+    raw = json.dumps(tags, ensure_ascii=False)
+    return base64.b64encode(raw.encode("utf-8")).decode("ascii")
+
+
 def join_html(parts: list[str]) -> str:
     return "\n".join(part for part in parts if part)
 
@@ -129,6 +135,138 @@ def render_summary(summary: dict[str, Any] | str) -> str:
     return h(summary)
 
 
+def normalize_meta(meta: Any) -> dict[str, Any]:
+    if not isinstance(meta, dict):
+        raise ValueError("payload.meta 必须存在且为对象")
+    date = meta.get("date")
+    if not isinstance(date, str) or not date.strip():
+        raise ValueError("payload.meta.date 缺失或不是有效字符串")
+    return {
+        "date": date.strip(),
+        "date_label": meta.get("date_label", ""),
+        "generated_at": meta.get("generated_at", ""),
+        "generated_time": meta.get("generated_time", ""),
+        "role": meta.get("role", ""),
+    }
+
+
+def normalize_actions(items: Any) -> list[dict[str, Any]]:
+    if items is None:
+        return []
+    if not isinstance(items, list):
+        raise ValueError("payload.left_sidebar.actions 必须为数组")
+    normalized = []
+    for idx, item in enumerate(items, start=1):
+        if not isinstance(item, dict):
+            raise ValueError(f"payload.left_sidebar.actions[{idx}] 必须为对象")
+        action_type = item.get("type", "watch")
+        if action_type not in ACTION_META:
+            action_type = "watch"
+        normalized.append(
+            {"type": action_type, "text": item.get("text", ""), "prompt": item.get("prompt", "")}
+        )
+    return normalized
+
+
+def normalize_overview(items: Any) -> list[dict[str, Any]]:
+    if items is None:
+        return []
+    if not isinstance(items, list):
+        raise ValueError("payload.left_sidebar.overview 必须为数组")
+    normalized = []
+    for idx, item in enumerate(items, start=1):
+        if not isinstance(item, dict):
+            raise ValueError(f"payload.left_sidebar.overview[{idx}] 必须为对象")
+        normalized.append({"title": item.get("title", ""), "text": item.get("text", "")})
+    return normalized
+
+
+def normalize_trends(trends: Any) -> dict[str, Any]:
+    if trends is None:
+        return {"rising": [], "cooling": [], "steady": [], "insight": ""}
+    if not isinstance(trends, dict):
+        raise ValueError("payload.left_sidebar.trends 必须为对象")
+
+    def ensure_tag_list(name: str) -> list[str]:
+        value = trends.get(name, [])
+        if value is None:
+            return []
+        if not isinstance(value, list):
+            raise ValueError(f"payload.left_sidebar.trends.{name} 必须为数组")
+        return [str(tag) for tag in value]
+
+    return {
+        "rising": ensure_tag_list("rising"),
+        "cooling": ensure_tag_list("cooling"),
+        "steady": ensure_tag_list("steady"),
+        "insight": trends.get("insight", ""),
+    }
+
+
+def normalize_articles(items: Any) -> list[dict[str, Any]]:
+    if items is None:
+        return []
+    if not isinstance(items, list):
+        raise ValueError("payload.articles 必须为数组")
+    normalized = []
+    for idx, article in enumerate(items, start=1):
+        if not isinstance(article, dict):
+            raise ValueError(f"payload.articles[{idx}] 必须为对象")
+        tags = article.get("tags", [])
+        if tags is None:
+            tags = []
+        if not isinstance(tags, list):
+            raise ValueError(f"payload.articles[{idx}].tags 必须为数组")
+        priority = article.get("priority", "normal")
+        if priority not in PRIORITY_ICON:
+            priority = "normal"
+        summary = article.get("summary", "")
+        if not isinstance(summary, (dict, str)):
+            raise ValueError(f"payload.articles[{idx}].summary 必须为字符串或对象")
+        normalized.append(
+            {
+                "id": article.get("id") or f"article-{idx}",
+                "title": article.get("title", ""),
+                "priority": priority,
+                "time_label": article.get("time_label", ""),
+                "source": article.get("source", ""),
+                "url": article.get("url", "#"),
+                "summary": summary,
+                "relevance": article.get("relevance", ""),
+                "tags": [str(tag) for tag in tags],
+                "is_exploration": bool(article.get("is_exploration")),
+            }
+        )
+    return normalized
+
+
+def normalize_payload(payload: Any) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        raise ValueError("payload 顶层必须为对象")
+
+    left_sidebar = payload.get("left_sidebar", {})
+    if not isinstance(left_sidebar, dict):
+        raise ValueError("payload.left_sidebar 必须为对象")
+
+    data_sources = payload.get("data_sources", [])
+    if data_sources is None:
+        data_sources = []
+    if not isinstance(data_sources, list):
+        raise ValueError("payload.data_sources 必须为数组")
+
+    return {
+        "meta": normalize_meta(payload.get("meta")),
+        "raw_capture_path": payload.get("raw_capture_path", ""),
+        "left_sidebar": {
+            "overview": normalize_overview(left_sidebar.get("overview", [])),
+            "actions": normalize_actions(left_sidebar.get("actions", [])),
+            "trends": normalize_trends(left_sidebar.get("trends", {})),
+        },
+        "articles": normalize_articles(payload.get("articles", [])),
+        "data_sources": [str(source) for source in data_sources],
+    }
+
+
 def render_article(article: dict[str, Any], index: int) -> str:
     article_id = article.get("id") or f"article-{index}"
     exploration = bool(article.get("is_exploration"))
@@ -156,7 +294,7 @@ def render_article(article: dict[str, Any], index: int) -> str:
         )
 
     return f"""        <article class="bg-white rounded-xl shadow-sm p-4 card-hover{border}"
-                 data-article-id="{h(article_id)}" data-title="{title}" data-tags='{json.dumps(tags, ensure_ascii=False)}'>
+                 data-article-id="{h(article_id)}" data-title="{title}" data-tags="{h(serialize_tags_attr(tags))}">
           <div class="flex items-start justify-between">
             <h3 class="text-[15px] font-semibold text-primary leading-snug">{title_prefix}{title}</h3>
             <span class="text-xs text-gray-400 whitespace-nowrap ml-3">{time_label}</span>
@@ -190,7 +328,7 @@ def render_overview(items: list[dict[str, Any]]) -> str:
 def render_actions(items: list[dict[str, Any]]) -> str:
     lines = []
     for item in items:
-        meta = ACTION_META[item.get("type", "watch")]
+        meta = ACTION_META.get(item.get("type", "watch"), ACTION_META["watch"])
         lines.append(
             f"""            <li class="action-item flex items-start gap-2.5 ai-bg rounded-lg px-3 py-2.5"
                 data-action-type="{h(item.get("type", "watch"))}"
@@ -233,14 +371,14 @@ def render_trends(trends: dict[str, Any]) -> str:
 
 
 def render_html(payload: dict[str, Any]) -> str:
-    meta = payload["meta"]
-    left = payload["left_sidebar"]
-    articles = payload["articles"]
+    meta = payload.get("meta", {})
+    left = payload.get("left_sidebar", {})
+    articles = payload.get("articles", [])
     article_items = "\n".join(
         render_article(article, index) for index, article in enumerate(articles, start=1)
     )
     data_sources = h("、".join(payload.get("data_sources", [])))
-    title_date = h(meta["date"])
+    title_date = h(meta.get("date", ""))
     date_label = render_date_label(meta)
     item_count = len(articles)
     generated_at = h(meta.get("generated_at", ""))
@@ -426,6 +564,10 @@ def render_html(payload: dict[str, Any]) -> str:
   const cardTimers = {{}};
   const cardDwellTime = {{}};
   const pageLoadTime = Date.now();
+  const sessionId = (window.crypto && typeof window.crypto.randomUUID === 'function')
+    ? window.crypto.randomUUID()
+    : ('session-' + Date.now() + '-' + Math.random().toString(16).slice(2));
+  let leaveHandled = false;
 
   const AI_TOOLS = [
     {{ id: 'claude', name: 'Claude', icon: 'fa-solid fa-message', btnClass: 'btn-claude', url: 'https://claude.ai/new?q={{prompt}}' }},
@@ -437,6 +579,23 @@ def render_html(payload: dict[str, Any]) -> str:
   function ts() {{ return new Date().toISOString(); }}
   function log(event) {{ events.push(event); console.log('%c[反馈]%c ' + event.type, 'color:#6C5CE7;font-weight:bold', 'color:#333', event); }}
   function showToast(msg, dur) {{ const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), dur || 2000); }}
+  function decodeBase64Utf8(value) {{
+    const binary = atob(value);
+    if (typeof TextDecoder !== 'undefined') {{
+      const bytes = Uint8Array.from(binary, ch => ch.charCodeAt(0));
+      return new TextDecoder('utf-8').decode(bytes);
+    }}
+    const escaped = Array.from(binary, ch => '%' + ch.charCodeAt(0).toString(16).padStart(2, '0')).join('');
+    return decodeURIComponent(escaped);
+  }}
+  function parseTags(value) {{
+    if (!value) return [];
+    try {{
+      return JSON.parse(decodeBase64Utf8(value));
+    }} catch (err) {{
+      return [];
+    }}
+  }}
 
   function sendToAI(tool, prompt) {{
     if (tool.id === 'copy') {{ navigator.clipboard.writeText(prompt).then(() => showToast('Prompt 已复制到剪贴板')); }}
@@ -472,7 +631,7 @@ def render_html(payload: dict[str, Any]) -> str:
         t.addEventListener('click', function() {{ const w = this.classList.toggle('tag-clicked'); log({{ type: w ? 'tag_follow' : 'tag_unfollow', tag: text, articleId: id, title, timestamp: ts() }}); }});
       }}
     }});
-    card.dataset.tags = JSON.stringify(tags);
+    card.dataset.tags = card.dataset.tags || '';
     const actionBar = card.querySelector('.flex.items-center.justify-between.mt-2');
     if (actionBar) {{
       const btnGroup = document.createElement('span'); btnGroup.className = 'flex items-center gap-3 ml-auto mr-3';
@@ -514,7 +673,7 @@ def render_html(payload: dict[str, Any]) -> str:
   }});
 
   cards.forEach(card => {{
-    const title = card.dataset.title; const tags = JSON.parse(card.dataset.tags || '[]');
+    const title = card.dataset.title; const tags = parseTags(card.dataset.tags || '');
     const se = card.querySelector('.ai-gradient-line'); const s = se ? se.textContent.trim().substring(0, 200) : '';
     const re = card.querySelector('[class*=\"F8F7FF\"]'); const r = re ? re.textContent.trim() : '';
     const dp = '我在阅读 AI 日报时看到了这条资讯，请帮我深入分析：\\n\\n标题：' + title + '\\n标签：' + tags.join(' ') + '\\n摘要：' + s + '\\n' + (r ? '与我的关联：' + r + '\\n' : '') + '\\n请从以下角度展开：\\n1. 技术细节和背景\\n2. 短期和长期影响\\n3. 我应如何应对\\n4. 推荐学习资源';
@@ -547,7 +706,7 @@ def render_html(payload: dict[str, Any]) -> str:
       entries.forEach(e => {{ const c = e.target, id = c.dataset.articleId; if (!id) return;
         if (e.isIntersecting) {{ cardTimers[id] = Date.now(); }} else if (cardTimers[id]) {{
           const el = Date.now() - cardTimers[id]; cardDwellTime[id] = (cardDwellTime[id] || 0) + el; delete cardTimers[id];
-          if (el > 5000) log({{ type: 'dwell', articleId: id, title: c.dataset.title, tags: JSON.parse(c.dataset.tags || '[]'), duration_ms: el, timestamp: ts() }});
+          if (el > 5000) log({{ type: 'dwell', articleId: id, title: c.dataset.title, tags: parseTags(c.dataset.tags || ''), duration_ms: el, timestamp: ts() }});
         }}
       }});
     }}, {{ root: fc, threshold: 0.5 }});
@@ -556,30 +715,38 @@ def render_html(payload: dict[str, Any]) -> str:
 
   document.querySelectorAll('main a[target=\"_blank\"]').forEach(l => {{
     l.addEventListener('click', function() {{ const c = this.closest('article[data-article-id]');
-      if (c) log({{ type: 'click_source', articleId: c.dataset.articleId, title: c.dataset.title, tags: JSON.parse(c.dataset.tags || '[]'), url: this.href, timestamp: ts() }});
+      if (c) log({{ type: 'click_source', articleId: c.dataset.articleId, title: c.dataset.title, tags: parseTags(c.dataset.tags || ''), url: this.href, timestamp: ts() }});
     }});
   }});
 
   document.addEventListener('copy', function() {{
     const s = window.getSelection(); if (!s || !s.anchorNode) return;
     const c = s.anchorNode.parentElement?.closest('article[data-article-id]');
-    if (c) log({{ type: 'copy', articleId: c.dataset.articleId, title: c.dataset.title, tags: JSON.parse(c.dataset.tags || '[]'), copiedText: s.toString().substring(0, 100), timestamp: ts() }});
+    if (c) log({{ type: 'copy', articleId: c.dataset.articleId, title: c.dataset.title, tags: parseTags(c.dataset.tags || ''), copiedText: s.toString().substring(0, 100), timestamp: ts() }});
   }});
 
   function buildSummary() {{
     Object.keys(cardTimers).forEach(id => {{ cardDwellTime[id] = (cardDwellTime[id] || 0) + (Date.now() - cardTimers[id]); }});
     const totalTime = Math.round((Date.now() - pageLoadTime) / 1000);
-    const voted = events.filter(e => e.type === 'vote').map(e => ({{ id: e.articleId, title: e.title, tags: e.tags }}));
-    const bookmarked = events.filter(e => e.type === 'bookmark').map(e => ({{ id: e.articleId, title: e.title, tags: e.tags }}));
-    const tagFollows = [...new Set(events.filter(e => e.type === 'tag_follow').map(e => e.tag))];
-    const tagUnfollows = [...new Set(events.filter(e => e.type === 'tag_unfollow').map(e => e.tag))];
-    const clicked = events.filter(e => e.type === 'click_source').map(e => ({{ id: e.articleId, title: e.title }}));
-    const copied = events.filter(e => e.type === 'copy').map(e => ({{ id: e.articleId, title: e.title }}));
+    const voteState = new Map();
+    const bookmarkState = new Map();
+    const tagState = new Map();
+    events.forEach(e => {{
+      if ((e.type === 'vote' || e.type === 'unvote') && e.articleId) voteState.set(e.articleId, e);
+      if ((e.type === 'bookmark' || e.type === 'unbookmark') && e.articleId) bookmarkState.set(e.articleId, e);
+      if ((e.type === 'tag_follow' || e.type === 'tag_unfollow') && e.tag) tagState.set(e.tag, e.type === 'tag_follow');
+    }});
+    const voted = [...voteState.values()].filter(e => e.type === 'vote').map(e => ({{ id: e.articleId, title: e.title, tags: e.tags }}));
+    const bookmarked = [...bookmarkState.values()].filter(e => e.type === 'bookmark').map(e => ({{ id: e.articleId, title: e.title, tags: e.tags }}));
+    const tagFollows = [...tagState.entries()].filter(([, followed]) => followed).map(([tag]) => tag);
+    const tagUnfollows = [...tagState.entries()].filter(([, followed]) => !followed).map(([tag]) => tag);
+    const clicked = events.filter(e => e.type === 'click_source').map(e => ({{ id: e.articleId, title: e.title, tags: e.tags || [] }}));
+    const copied = events.filter(e => e.type === 'copy').map(e => ({{ id: e.articleId, title: e.title, tags: e.tags || [] }}));
     const aiUsage = events.filter(e => e.type === 'send_to_ai');
     const aiCounts = {{}}; aiUsage.forEach(u => {{ aiCounts[u.tool] = (aiCounts[u.tool] || 0) + 1; }});
     const dwellRanking = Object.entries(cardDwellTime).map(([id, ms]) => {{
       const c = document.querySelector(`[data-article-id=\"${{id}}\"]`);
-      return {{ articleId: id, title: c ? c.dataset.title : id, tags: c ? JSON.parse(c.dataset.tags || '[]') : [], dwell_seconds: Math.round(ms / 1000) }};
+      return {{ articleId: id, title: c ? c.dataset.title : id, tags: c ? parseTags(c.dataset.tags || '') : [], dwell_seconds: Math.round(ms / 1000) }};
     }}).filter(d => d.dwell_seconds > 0).sort((a, b) => b.dwell_seconds - a.dwell_seconds);
     const tagScores = {{}};
     function addTS(tags, w) {{ (tags || []).forEach(t => {{ tagScores[t] = (tagScores[t] || 0) + w; }}); }}
@@ -589,7 +756,7 @@ def render_html(payload: dict[str, Any]) -> str:
     const tagRanking = Object.entries(tagScores).sort((a, b) => b[1] - a[1]).map(([tag, score]) => ({{ tag, score }}));
     return {{
       date: DATE,
-      session: {{ total_time_seconds: totalTime, total_events: events.length, page_load: new Date(pageLoadTime).toISOString() }},
+      session: {{ session_id: sessionId, total_time_seconds: totalTime, total_events: events.length, page_load: new Date(pageLoadTime).toISOString() }},
       explicit_feedback: {{ voted, bookmarked, tags_followed: tagFollows, tags_unfollowed: tagUnfollows }},
       implicit_feedback: {{ dwell_ranking: dwellRanking, articles_clicked: clicked, articles_copied: copied }},
       ai_interaction: {{ tools_used: aiCounts, detail: aiUsage.map(u => ({{ tool: u.tool, prompt_preview: u.prompt }})) }},
@@ -599,6 +766,8 @@ def render_html(payload: dict[str, Any]) -> str:
   }}
 
   function onLeave() {{
+    if (leaveHandled) return;
+    leaveHandled = true;
     const summary = buildSummary();
     if (IS_HTTP) navigator.sendBeacon('/api/feedback', JSON.stringify(summary));
     try {{ const st = JSON.parse(localStorage.getItem('ai_daily_feedback') || '[]'); st.push(summary); if (st.length > 30) st.splice(0, st.length - 30); localStorage.setItem('ai_daily_feedback', JSON.stringify(st)); }} catch(e) {{}}
@@ -607,8 +776,8 @@ def render_html(payload: dict[str, Any]) -> str:
     console.log('%c╚══════════════════════════════════════════════════╝', 'color:#6C5CE7');
     console.log(JSON.stringify(summary, null, 2));
   }}
-  document.addEventListener('visibilitychange', () => {{ if (document.visibilityState === 'hidden') onLeave(); }});
-  window.addEventListener('beforeunload', onLeave);
+  window.addEventListener('pagehide', onLeave, {{ capture: true }});
+  window.addEventListener('beforeunload', onLeave, {{ capture: true }});
 
   console.log('%c╔══════════════════════════════════════════════════╗', 'color:#6C5CE7');
   console.log('%c║     AI 日报反馈采集已启动 · ' + DATE + '            ║', 'color:#6C5CE7;font-weight:bold');
@@ -639,7 +808,12 @@ def main() -> None:
     args = parse_args()
     input_path = Path(args.input)
     output_path = Path(args.output) if args.output else input_path.with_suffix(".html")
-    payload = json.loads(input_path.read_text(encoding="utf-8"))
+    try:
+        payload = normalize_payload(json.loads(input_path.read_text(encoding="utf-8")))
+    except json.JSONDecodeError as exc:
+        raise SystemExit(f"ERROR: payload JSON 解析失败: {exc}") from exc
+    except ValueError as exc:
+        raise SystemExit(f"ERROR: payload 契约校验失败: {exc}") from exc
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(render_html(payload), encoding="utf-8")
     print(f"Rendered {output_path}")
