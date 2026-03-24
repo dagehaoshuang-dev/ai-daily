@@ -47,12 +47,12 @@ metadata:
 
 - 用户直接提供的日报内容
 - 当前工作目录下的日报 JSON / HTML 文件
-- `reference/daily_evaluation_template.md`
+- `reference/daily_evaluation_guide.md`
 
 如果用户同时提出“先生成，再评估”，则按顺序执行：
 
 1. 先生成日报
-2. 再根据评估模板输出质量评估
+2. 再根据评估指南完成质量评估并输出结果
 
 ## 生成日报流程
 
@@ -116,14 +116,24 @@ AI 作为"编辑"，先通读用户画像，制定本次日报的编辑策略：
 
 AI 根据第一步制定的编辑策略，使用搜索工具并行抓取。
 
-**AI 自主决定搜索什么、搜多少、从哪里搜。** 以下是指导原则而非固定模板：
+采集阶段采用“先轻抓候选池，再少量深抓正文”的方案。具体方法、来源策略、时间窗口、原始数据留存方式和执行清单，统一参考：
 
-- 并行发起至少 4 条搜索，覆盖中英文
-- 搜索词应结合用户兴趣动态构造（不是固定关键词）
-  - 比如用户反馈中 #Agent 得分最高，就加大 Agent 相关搜索力度
-  - 比如用户最近取消了 #论文 标签，就减少论文方向的搜索
-- 抓取 1-2 个新闻聚合页补充细节（WebFetch）
-- 如果某个方向搜索结果不够丰富，AI 应主动调整关键词重新搜索
+- `reference/daily_collection_guide.md`
+
+执行要求：
+
+- 采集默认按最近一周进行；如用户明确指定日期或时间范围，则以用户要求为准
+- 数据抓取默认优先使用 Agent Reach
+- 如果当前环境未安装 Agent Reach 技能，先按安装文档完成安装：`https://raw.githubusercontent.com/Panniantong/agent-reach/main/docs/install.md`
+- 不要一开始就抓取所有文章全文
+- 进入筛选与改写前，必须先完成原始采集数据留存
+- 原始数据优先通过 `scripts/save_raw_capture.py` 追加写入
+
+高层原则：
+
+- 搜索词应结合用户兴趣动态构造，而不是固定关键词
+- 候选池优先覆盖权威官方来源，并补足国内、研究、社区或开源信号
+- 只对少量高价值条目继续深抓正文
 
 ### 第三步：筛选与加工 — AI 编辑判断
 
@@ -195,6 +205,7 @@ AI 作为"总编辑"，从采集到的全部资讯中做以下决策：
 
 完整 payload 需包含：
 - `meta`：日期、角色、生成时间等顶层信息
+- `raw_capture_path`：指向本次原始采集文件，例如 `output/raw/{date}.txt`
 - `left_sidebar.overview`
 - `left_sidebar.actions`
 - `left_sidebar.trends`
@@ -481,87 +492,25 @@ function onLeave() {
 
 ### 第二步：读取当前用户兴趣上下文
 
-评估日报时，不能只按通用媒体标准打分，还要判断它**是否适合当前这位用户**。
-
-因此应优先读取：
-
 - `config/profile.yaml`
 - `data/feedback/` 下最近 7 天的反馈 JSON（如存在）
-
-评估时沿用生成流程中的原则：
-
-- `profile.yaml` 代表用户的显式偏好
-- 历史反馈代表用户的真实行为偏好
-- 两者冲突时，**以行为反馈为准，profile 为辅**
-
-需要明确梳理以下问题：
-
-- 这位用户的主角色与工作语境是什么
-- 用户显式关注哪些主题，优先级如何
-- 用户最近真实更在意哪些标签、话题、工具或内容形态
-- 这份日报的前几条内容，是否真正命中了这些重点
-
-如果没有 `profile.yaml` 或历史反馈为空，则继续做通用质量评估，但必须明确说明：**本次未纳入用户兴趣个性化维度，只能给出通用质量判断。**
 
 ### 第三步：读取评估方法
 
 必须参考：
 
-- `reference/daily_evaluation_template.md`
+- `reference/daily_evaluation_guide.md`
 
 如果用户额外提供评估方法论文档，也要一并参考，并优先遵循用户提供的评估规则。
 
-### 第四步：构建 Ground Truth
+### 第四步：按评估指南完成分析与输出
 
-围绕评估日期构建当日最重要的 AI 事件 Ground Truth：
+根据 `reference/daily_evaluation_guide.md`：
 
-- 优先使用官方 / 一手来源
-- 覆盖产品 / 模型 / 平台
-- 覆盖中国信号、开源 / GitHub、社区 / 论文
-- 明确哪些事件是真正“应该被写进日报”的
-
-同时还要构建一份**用户相关 Ground Truth**：
-
-- 哪些事件虽然不是全行业最热，但对当前用户最有价值
-- 哪些事件与用户角色、关注主题、最近反馈高度相关，应被优先呈现
-- 哪些内容即便行业上重要，但对该用户可以后置
-
-### 第五步：做覆盖、结构与用户匹配评估
-
-至少输出：
-
-- 一句话总评
-- 五维评分：Coverage / Product Priority / Readability / Signal Diversity / Early Signal
-- 用户匹配判断：这份日报是否真正贴近当前用户的角色、兴趣与近期行为
-- 覆盖对比
-- 用户相关性对比
-- 漏项
-- 结构问题
-- 改进建议
-
-评估时要同时回答两类问题：
-
-1. **通用质量是否过关**
-   - 是否覆盖了当日最重要事件
-   - 排序是否合理
-   - 来源是否精确
-   - 是否有足够的信号多样性和早期信号
-
-2. **对当前用户是否合适**
-   - 前 3 条是否足够贴近用户角色与兴趣
-   - 行动建议是否真的可用于该用户的工作或决策
-   - 是否出现了用户高度关心的话题被后置、遗漏或表达过浅
-   - 是否塞入了太多对该用户价值不高的泛行业内容
-
-### 第六步：输出结构化评估
-
-输出格式应尽量贴近 `reference/daily_evaluation_template.md`，并明确：
-
-- 总分
-- 主要优点
-- 明显问题
-- 是否达到“可作为高质量行业判断输入”的标准
-- 是否达到“对当前用户足够有用、足够相关”的标准
+- 结合当前用户兴趣上下文
+- 构建通用 Ground Truth 与用户相关 Ground Truth
+- 完成通用质量与用户匹配度分析
+- 按指南中的结构输出正式评估结果
 
 ## 参考文件
 
@@ -569,7 +518,9 @@ function onLeave() {
 |------|------|
 | `reference/daily_example.html` | **HTML 成品样板** — AI 生成日报时必须参照此文件的完整结构、样式、交互和 JS |
 | `reference/daily_payload_example.json` | **日报 payload 示例** — 方案二中 AI 生成 JSON 时应参考此结构 |
-| `reference/daily_evaluation_template.md` | **日报评估模板** — 评估日报质量时应按此结构输出结果 |
+| `reference/daily_collection_guide.md` | **资讯采集指南** — 生成日报时按此文件执行最近一周候选池采集、正文深抓与原始数据留存 |
+| `reference/raw_capture_example.txt` | **原始采集文本示例** — 采集阶段应按此示例保留全部候选资讯原始文本 |
+| `reference/daily_evaluation_guide.md` | **日报评估指南** — 评估日报质量时按此文件了解方法并按其中结构输出结果 |
 | `reference/profile_template.yaml` | 用户兴趣配置模板 — 首次引导时参照生成 `config/profile.yaml` |
 | `reference/feedback_schema.json` | 反馈数据 JSON Schema — 定义 `data/feedback/{date}.json` 的完整结构 |
 
@@ -579,6 +530,7 @@ function onLeave() {
 |------|------|---------|
 | `scripts/render_daily.py` | 将 `output/daily/{date}.json` 稳定渲染为 HTML | `python3 scripts/render_daily.py output/daily/{date}.json` |
 | `scripts/open_daily.py` | 打开已生成的日报页面，优先使用本地 HTTP 服务地址 | `python3 scripts/open_daily.py {date}` |
+| `scripts/save_raw_capture.py` | 保存搜索或抓取得到的原始资讯文本，可直接抓取 URL 并追加写入 | `python3 scripts/save_raw_capture.py {date} --append ...` |
 | `scripts/feedback_server.py` | HTTP 静态服务 + 反馈接收，超时自动退出 | 后台运行 |
 
 注意：生成任务中，**采集、加工、筛选、摘要、行动建议由 AI 完成；HTML 结构输出优先由渲染脚本完成。** 评估任务中，AI 负责读取日报、构建 Ground Truth、完成打分和输出评估结果。
