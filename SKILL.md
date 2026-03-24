@@ -106,11 +106,33 @@ AI 作为"编辑"，先通读用户画像，制定本次日报的编辑策略：
 
 AI 根据第一步制定的编辑策略，使用搜索工具并行抓取。
 
-采集阶段采用“先轻抓候选池，再少量深抓正文”的方案。具体方法、来源策略、时间窗口、原始数据留存方式和执行清单，统一参考：
+采集阶段采用”先轻抓候选池，再少量深抓正文”的方案。具体方法、来源策略、时间窗口、原始数据留存方式和执行清单，统一参考：
 
 - `reference/daily_collection_guide.md`
 
-执行要求：
+**采集启动流程（按顺序执行）：**
+
+1. 先运行 `python3 scripts/build_queries.py --date {date} --window 3` 生成搜索查询列表
+2. 按查询列表逐条执行搜索，**不允许跳过 high 优先级话题的查询**
+3. 对 `FETCH` 类型的直抓来源，直接抓取页面获取最新条目
+4. 搜索完成后统计候选池数量
+
+**候选池最低数量门槛：**
+
+- 候选池（去重前）至少达到 `daily.max_items × 3` 条（默认 45 条）
+- 如果第一轮搜索后候选不足，必须：
+  1. 对未命中的话题追加搜索，变换关键词组合
+  2. 尝试直接抓取 `sources.direct` 中的频道页获取最新条目
+  3. 扩大搜索范围（如增加英文查询、尝试不同搜索引擎）
+- 连续两轮追加后仍不足，记录原因并继续（不阻断流程，但在第九步输出中说明）
+
+**话题覆盖检查：**
+
+- 所有 high 优先级话题在候选池中至少有 3 条命中
+- 所有 medium 优先级话题至少有 1 条命中
+- 未命中的话题必须追加搜索
+
+其他执行要求：
 
 - 采集时间窗口默认为**最近 3 日**；如果用户明确指定更短时间范围，则以用户要求为准；如果用户要求更长时间范围，必须先得到用户明确许可
 - 数据抓取默认优先使用 Agent Reach
@@ -353,6 +375,7 @@ AI 根据第一步制定的编辑策略，使用搜索工具并行抓取。
 | `scripts/render_daily.py` | 将 `output/daily/{date}.json` 稳定渲染为 HTML | `python3 scripts/render_daily.py output/daily/{date}.json` |
 | `scripts/open_daily.py` | 打开已生成的日报页面，优先使用本地 HTTP 服务地址 | `python3 scripts/open_daily.py {date}` |
 | `scripts/save_raw_capture.py` | 保存搜索或抓取得到的原始资讯文本，可直接抓取 URL 并追加写入 | `python3 scripts/save_raw_capture.py {date} --append ...` |
+| `scripts/build_queries.py` | 根据 profile.yaml 自动生成带日期过滤的搜索查询列表 | `python3 scripts/build_queries.py --date {date} --window 3` |
 | `scripts/feedback_server.py` | HTTP 静态服务 + 反馈接收，超时自动退出 | 后台运行 |
 
 注意：生成任务中，**采集、加工、筛选、摘要、行动建议由 AI 完成；HTML 结构输出优先由渲染脚本完成。** 评估任务中，AI 负责读取日报、构建 Ground Truth、完成打分和输出评估结果。
