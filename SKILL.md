@@ -54,6 +54,22 @@ metadata:
 1. 先生成日报
 2. 再根据评估指南完成质量评估并输出结果
 
+## 渐进式加载纪律
+
+主技能文件只负责路由和步骤编排，不要预先读取所有 `reference/` 文件。
+
+- 先判断用户意图，再进入对应流程
+- 生成流程中：
+  - 先读取 `config/profile.yaml` 与最近 7 天 `data/feedback/`
+  - 进入采集阶段时，才读取 `reference/daily_collection_guide.md`
+  - 生成 payload 时，才读取 `reference/daily_payload_example.json`
+  - 非必要不要读取 `reference/daily_example.html`
+- 评估流程中：
+  - 只在执行评估时读取 `reference/daily_evaluation_guide.md`
+- `reference/daily_example.html` 仅作为历史样板/视觉与交互参考，不是标准生成主路径
+
+如果当前步骤不需要某个参考文件，就不要提前加载它。
+
 ## 生成日报流程
 
 下面的第零步到第七步默认用于“生成日报”任务。
@@ -111,327 +127,57 @@ AI 根据第一步制定的编辑策略，使用搜索工具并行抓取。
 
 ### 第三步：筛选与加工 — AI 编辑判断
 
-**这一步完全由 AI 的编辑判断力完成**，不使用任何评分公式或代码过滤。
+这一步由 AI 作为“总编辑”完成，不使用固定评分公式。
 
-AI 作为"总编辑"，从采集到的全部资讯中做以下决策：
+执行要点：
 
-1. **筛选**（由 `daily.max_items` 控制总量）：
-   - 判断每条资讯对这位具体用户的价值，而非通用重要性
-   - 同一事件的多个报道只保留最有价值的一条
-   - 考虑话题多样性，避免某个方向占比过高
-   - 结合反馈数据：用户过去投票/收藏的同类资讯应优先入选
+1. 根据 `daily.max_items` 控制总量，优先判断“对当前用户是否重要”
+2. 同一事件的多篇报道只保留最有价值的一条
+3. 重大行业事件可以打破兴趣偏好排在前面
+4. 生成每条资讯的标题、摘要、`与你相关` 解读、标签和原文链接
+5. 同时生成左栏所需的：
+   - `overview`
+   - `actions`
+   - `trends`
+6. 注意不要把多个独立事件硬揉成一条抽象判断，尽量保持可验证、可追溯
 
-2. **排序**：
-   - 不使用固定公式，AI 根据"如果我是这位用户，最想先看到什么"来排序
-   - 重大行业事件可以打破兴趣偏好排在前面
+在这一阶段，**只有当开始生成结构化 payload 时**，才读取：
 
-3. **分级**：
-   - 🔥 重大：足以改变行业格局或直接影响用户工作的事件
-   - 📌 值得关注：有价值但不紧急
-   - 普通：信息补充
-   - 拓展阅读（1-2 条）：用户兴趣范围外，但 AI 认为值得拓展视野的内容
+- `reference/daily_payload_example.json`
 
-4. **生成内容**（每条资讯）：
-   - 标题：可以根据用户角色微调侧重点
-   - 结构化摘要：发生了什么 / 为什么重要（用用户能理解的语言）
-   - 💡 与你相关：基于用户角色和兴趣，解读这件事和该用户有什么关系
-   - 标签（1-4 个）
-   - 原文链接
+主技能只要求把 payload 生成正确，不在这里展开完整字段细节。字段结构、示例和推荐形态以 `reference/daily_payload_example.json` 为准。
 
-5. **生成全局内容**：
-   - **今日速览**（3 条）：对该用户最重要的 3 件事，必须包含与用户的关联点
-   - **行动建议**（3-4 条）：📖建议学习 / 🔧建议尝试 / 👁️持续关注 / ⚠️需要警惕，每条生成一个精心构造的 `data-action-prompt`（深度 prompt，后续发送给 AI 工具用）
-   - **趋势雷达**：上升 / 消退 / 持续热点 + AI 洞察段落
+最小契约要求：
 
-6. **兴趣漂移检测**：
-   - 如果反馈数据中某个标签持续得分高但不在 profile.yaml 中，在日报底部提示："检测到你近期对 #XX 感兴趣，是否要加入关注？"
-   - 如果 profile.yaml 中某个话题近 7 天反馈中零互动，考虑降低该话题的采集量
-
-#### 日报中间数据契约
-
-在方案二中，AI **先生成结构化 JSON，再调用脚本渲染 HTML**。不要边写 HTML 边临时决定字段。每条资讯至少应包含：
-
-```json
-{
-  "id": "article-1",
-  "title": "资讯标题",
-  "priority": "major",
-  "time_label": "3小时前",
-  "source": "来源名",
-  "url": "https://example.com",
-  "summary": {
-    "what_happened": "发生了什么",
-    "why_it_matters": "为什么重要"
-  },
-  "relevance": "与你相关的解读",
-  "tags": ["#Agent", "#开源"],
-  "is_exploration": false
-}
-```
-
-约束：
-- `id` 必须是稳定的 `article-N`
-- `priority` 仅允许 `major | notable | normal`
-- `tags` 为 1-4 个 `#标签`
-- `url` 必须是可直接打开的原文链接
-- `summary.what_happened` 和 `summary.why_it_matters` 必须都存在
-- 拓展阅读需额外标记 `is_exploration: true`
-
-完整 payload 需包含：
-- `meta`：日期、角色、生成时间等顶层信息
-- `raw_capture_path`：指向本次原始采集文件，例如 `output/raw/{date}.txt`
-- `left_sidebar.overview`
-- `left_sidebar.actions`
-- `left_sidebar.trends`
-- `articles`
-- `data_sources`
-
-可直接参考：`reference/daily_payload_example.json`
-
-#### 生成质量约束
-
-为保证日报长期稳定达到较高质量，生成内容时必须额外满足以下约束：
-
-1. **头部排序约束**
-   - 前 3 条优先放真正重要的产品 / 模型 / 平台级变化
-   - 前 3 条尽量保持"一条资讯对应一个明确事件"，不要把多个公司或多个发布揉成一条抽象判断
-   - 如果存在足以影响行业格局、工作流入口或用户日常工作的重大事件，应优先进入前 3
-
-2. **来源精度约束**
-   - 核心资讯必须优先链接到精确原始来源，而不是官网首页、频道首页或泛聚合页
-   - `articles` 前 5 条默认应使用官方发布页、原始博客、论文页、项目页或一手公告
-   - 只有在没有更精确原文时，才退而使用高质量二手来源，并在摘要里避免把推断说成事实
-
-3. **信号多样性约束**
-   - 整体内容不能只由头部英文厂商新闻构成，需主动覆盖不同类型信号
-   - 默认应尽量覆盖以下类别中的至少 3 类：
-     - 国际头部产品 / 模型 / 平台动态
-     - 中国 AI 动态
-     - 开源 / GitHub / 社区项目
-     - 论文 / 研究 / Benchmark / 安全信号
-     - 企业工作流 / 办公 / 开发工具入口变化
-   - 如果 `daily.max_items >= 8`，应优先做到：
-     - 至少 1 条中国信号
-     - 至少 1 条开源 / GitHub / 社区信号
-     - 至少 1 条研究、评测、论文或安全信号
-
-4. **拓展阅读约束**
-   - 拓展阅读优先承载 Early Signal：传播尚不广、但可能影响后续产品形态、Agent 工作流、模型部署或治理方式的具体项目 / 方向
-   - 不要把空泛的行业评论、趋势口号或没有明确事件支撑的宏观判断放进拓展阅读
-   - 拓展阅读仍应有具体来源、具体项目或具体发布，而不是只有概念总结
-
-5. **去泛化约束**
-   - 后半部分条目也应尽量使用具体事件、具体项目、具体发布来表达，不要大量使用"行业正在..."、"开始..."、"持续演进..."这类抽象概括
-   - 如果一条内容无法回答"发生了什么"和"为什么现在值得看"，就不应入选
-
-6. **左栏内容约束**
-   - 今日速览的 3 条必须与正文前部重点条目一致，不能写成比正文更抽象的趋势判断
-   - 行动建议应尽量对应正文里的具体事件或工具，而不是脱离当天内容单独发挥
-   - 趋势雷达可以概括，但必须建立在正文已覆盖的具体信号之上
-
-7. **输出风格约束**
-   - 以高信息密度、强可验证性、低空话率为优先
-   - 摘要应明确区分事实、判断和推断；没有直接证据的内容不要写成确定结论
-   - 对用户真正相关的价值要落到工作流、决策、技术路线、工具选择或学习重点上，而不是泛泛而谈
-
-如果多个约束冲突，优先顺序为：
-1. 重大事件优先
-2. 来源精确优先
-3. 排序清晰优先
-4. 信号多样性优先
-5. 表达完整优先
+- 生成 `output/daily/{date}.json`
+- `meta`、`left_sidebar`、`articles`、`data_sources` 必须存在
+- `raw_capture_path` 应指向当前采集产物，例如：
+  - `output/raw/{date}_index.txt`
+  - 如已做深抓，可同时在内容或注释中说明 `output/raw/{date}_detail.txt`
 
 ### 第四步：AI 生成 HTML
 
-**优先使用模板化渲染，不再默认由 AI 手写整页 HTML。**
-
 标准流程：
-1. AI 先生成结构化 payload，写入 `output/daily/{date}.json`
+
+1. AI 先生成 `output/daily/{date}.json`
 2. 调用 `scripts/render_daily.py output/daily/{date}.json`
 3. 由脚本输出 `output/daily/{date}.html`
-4. 生成后调用 `scripts/open_daily.py {date}` 打开页面；若反馈服务已启动则优先打开本机 HTTP 地址，否则回退到本地文件
+4. 生成后调用 `scripts/open_daily.py {date}` 打开页面；若反馈服务已启动则优先打开 HTTP 地址，否则回退到本地文件
 
-只有在渲染脚本缺失或损坏时，才退回到直接生成完整 HTML。
+执行要求：
 
-重要约束：
-- **不要重新设计页面结构，不要重写交互逻辑，不要删改反馈 JS 的行为。**
-- 通过渲染脚本稳定复用样板页结构、样式和脚本，只替换日期、角色、统计数字、左栏文案、资讯卡片内容和数据来源。
-- 渲染结果必须保留 `data-article-id`、`data-title`、`data-tags`、`data-action-prompt` 等属性，确保反馈采集和 AI 工具菜单正常工作。
-- HTTP 模式下只在离开页面时提交一次完整 feedback summary；不要新增定时事件批量落盘逻辑。
-- 如果无法 100% 确认某段 JS 的作用，宁可原样保留，也不要自行改写。
+- 不要默认手写整页 HTML
+- 不要重写页面结构、反馈逻辑或交互脚本
+- 标准路径是 `JSON -> scripts/render_daily.py -> HTML`
 
-成品样板文件：`reference/daily_example.html`
-- 该文件是一份已经生产验证过的完整日报页面
-- 包含完整的布局、样式、反馈 JS、AI 工具集成
-- 渲染器应保持与样板一致的结构和交互体验，只替换实际的资讯内容
+只有在渲染脚本缺失、损坏或标准流程明确失败时，才把 `reference/daily_example.html` 当作兜底参考。
+它的定位是：
 
-#### 技术依赖
+- 历史样板
+- 视觉与交互参考
+- 渲染器异常时的备用参考
 
-```html
-<script src="https://cdn.tailwindcss.com"></script>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
-```
-
-Tailwind 扩展色值：`primary: '#1A1A2E'`、`accent: '#6C5CE7'`。
-
-自定义 CSS 仅两段：
-```css
-.ai-gradient-line { border-left: 3px solid; border-image: linear-gradient(to bottom, #6C5CE7, #3B82F6) 1; }
-.ai-bg { background: linear-gradient(135deg, #F8F7FF, #F0F7FF); }
-```
-
-#### 页面布局（PC 左右双栏）
-
-- `body`：`h-screen overflow-hidden flex flex-col`
-- 顶部栏：Logo + 日期 + 资讯数 + 用户角色
-- 左栏（420px，白色，独立滚动）：今日速览 → 行动建议 → 趋势雷达
-- 右栏（自适应，独立滚动）：资讯卡片列表
-
-#### Font Awesome 图标映射（不用 emoji）
-
-| 场景 | FA Class |
-|------|----------|
-| 日报标题 | `fa-solid fa-robot` |
-| 日期 | `fa-regular fa-calendar` |
-| 速览 | `fa-solid fa-bolt` |
-| 资讯 | `fa-solid fa-newspaper` |
-| 行动建议 | `fa-solid fa-bullseye` |
-| 趋势 | `fa-solid fa-chart-line` |
-| 重大 | `fa-solid fa-fire` (text-red-500) |
-| 关注 | `fa-solid fa-thumbtack` (text-amber-500) |
-| 与你相关 | `fa-solid fa-lightbulb` (text-accent) |
-| 学习 | `fa-solid fa-book-open` (text-blue-500) |
-| 尝试 | `fa-solid fa-wrench` (text-emerald-500) |
-| 关注 | `fa-solid fa-eye` (text-amber-500) |
-| 警惕 | `fa-solid fa-triangle-exclamation` (text-red-500) |
-| 上升 | `fa-solid fa-arrow-trend-up` (text-emerald-500) |
-| 下降 | `fa-solid fa-arrow-trend-down` (text-gray-400) |
-| 热点 | `fa-solid fa-fire` (text-red-500) |
-| 洞察 | `fa-solid fa-wand-magic-sparkles` (text-accent) |
-| 原文 | `fa-solid fa-arrow-up-right-from-square` |
-| AI 深入 | `fa-solid fa-wand-magic-sparkles` |
-| 发送 AI | `fa-solid fa-paper-plane` |
-
-#### 资讯卡片 HTML 结构
-
-```html
-<article class="bg-white rounded-xl shadow-sm p-4 card-hover"
-         data-article-id="article-N" data-title="标题" data-tags='["#标签"]'>
-  <div class="flex items-start justify-between">
-    <h3 class="text-[15px] font-semibold text-primary leading-snug">
-      <i class="fa-solid fa-fire text-red-500 mr-1.5 text-xs"></i>标题
-    </h3>
-    <span class="text-xs text-gray-400 whitespace-nowrap ml-3">时间</span>
-  </div>
-  <p class="text-xs text-gray-400 mt-1"><i class="fa-solid fa-link mr-1"></i>来源</p>
-  <div class="ai-gradient-line pl-3 my-2.5 text-[13px] text-gray-600 leading-relaxed">
-    结构化摘要
-  </div>
-  <div class="bg-[#F8F7FF] rounded-lg px-3 py-2 text-[13px] text-gray-700 my-2">
-    <i class="fa-solid fa-lightbulb text-accent mr-1"></i>
-    <strong>与你相关：</strong>解读
-  </div>
-  <div class="flex items-center justify-between mt-2">
-    <div class="flex gap-1.5 flex-wrap">标签</div>
-    <!-- JS 自动注入：投票、收藏、AI 深入按钮 -->
-    <a href="URL" target="_blank" class="text-accent text-xs hover:underline">
-      <i class="fa-solid fa-arrow-up-right-from-square mr-1"></i>原文
-    </a>
-  </div>
-</article>
-```
-
-拓展阅读卡片加 `border border-dashed border-gray-200`，标签用 `bg-gray-100 text-gray-500`。
-
-#### 行动建议 HTML 结构
-
-每条 `<li>` 必须包含 `data-action-prompt` 属性（精心构造的深度 prompt）：
-
-```html
-<li class="action-item flex items-start gap-2.5 ai-bg rounded-lg px-3 py-2.5"
-    data-action-type="learn"
-    data-action-prompt="请帮我深入了解...（具体分析角度）">
-  <i class="fa-solid fa-book-open text-blue-500 mt-0.5 text-sm"></i>
-  <div class="flex-1">
-    <strong class="text-blue-600">建议学习</strong>
-    <p class="text-gray-600 mt-0.5 leading-relaxed">建议内容</p>
-  </div>
-</li>
-```
-
-#### 必须包含的 JavaScript
-
-在 `</body>` 前注入完整的反馈采集 + AI 原生交互 JS，包括：
-
-**AI 工具配置：**
-
-```javascript
-const AI_TOOLS = [
-  { id: 'claude', name: 'Claude', icon: 'fa-solid fa-message', url: 'https://claude.ai/new?q={prompt}' },
-  { id: 'chatgpt', name: 'ChatGPT', icon: 'fa-brands fa-openai', url: 'https://chatgpt.com/?q={prompt}' },
-  { id: 'deepseek', name: 'DeepSeek', icon: 'fa-solid fa-magnifying-glass', url: 'https://chat.deepseek.com/?q={prompt}' },
-  { id: 'copy', name: '复制 Prompt', icon: 'fa-regular fa-copy', url: null }
-];
-```
-
-**反馈采集（JS 动态注入到每张卡片）：**
-
-隐式：
-- IntersectionObserver 追踪卡片停留时长（>5s 记录），root 为右栏滚动容器
-- 原文链接点击追踪
-- 文本复制追踪
-
-显式：
-- 投票按钮（▲ caret-up）：`vote-btn`
-- 收藏按钮（bookmark）：`bookmark-btn`
-- 标签可点击关注/取消：`tag-clickable` + `tag-clicked`
-
-**AI 原生交互：**
-
-行动建议：
-- 每条右上角常驻 ✈️ 图标（`.ai-trigger-icon`）
-- 鼠标 hover 图标时左侧弹出浮层菜单（`.ai-menu`）
-- 结构：外层 `.ai-trigger-wrap`（`pointer-events:none`），菜单 + 图标（`pointer-events:auto`）
-- 用 JS mouseenter/mouseleave 控制显隐（150ms 延迟关闭），避免 hover 间隙
-
-资讯卡片：
-- 操作栏「AI 深入」按钮（`.card-ai-btn`）常驻显示
-- hover 时上方弹出浮层菜单
-- 结构：`.card-ai-wrap`（`position:relative; flex-shrink:0`），菜单绝对定位 `bottom:calc(100%+6px); right:0`
-- 同样用 JS mouseenter/mouseleave 控制
-
-**反馈上报：**
-
-```javascript
-const IS_HTTP = location.protocol.startsWith('http');
-
-// 只在离开页面时提交完整 summary
-function onLeave() {
-  const summary = buildSummary();
-  if (IS_HTTP) navigator.sendBeacon('/api/feedback', JSON.stringify(summary));
-  // 无论什么模式都写 localStorage + 控制台
-  localStorage 写入 ai_daily_feedback（最多保留最近 30 条）;
-  console.log(JSON.stringify(summary, null, 2));
-}
-```
-
-**汇总数据结构：**
-
-```json
-{
-  "date": "2026-03-21",
-  "session": { "total_time_seconds": 180, "total_events": 12 },
-  "explicit_feedback": { "voted": [], "bookmarked": [], "tags_followed": [], "tags_unfollowed": [] },
-  "implicit_feedback": { "dwell_ranking": [], "articles_clicked": [], "articles_copied": [] },
-  "ai_interaction": { "tools_used": {}, "detail": [] },
-  "interest_profile": { "tag_scores": [], "top_interests": [] },
-  "all_events": []
-}
-```
-
-说明：
-- `date`、`session`、`explicit_feedback`、`implicit_feedback`、`ai_interaction`、`interest_profile` 是正式反馈必备字段
-- `all_events` 是可选调试字段，可保留原始事件日志，但不能替代结构化 summary
+而不是当前主流程里的必读文件
 
 ### 第五步：更新导航首页
 
@@ -490,12 +236,12 @@ function onLeave() {
 
 | 文件 | 用途 |
 |------|------|
-| `reference/daily_example.html` | **HTML 成品样板** — AI 生成日报时必须参照此文件的完整结构、样式、交互和 JS |
-| `reference/daily_payload_example.json` | **日报 payload 示例** — 方案二中 AI 生成 JSON 时应参考此结构 |
-| `reference/daily_collection_guide.md` | **资讯采集指南** — 生成日报时按此文件执行最近一周候选池采集、正文深抓与原始数据留存 |
-| `reference/raw_capture_example.txt` | **原始采集文本示例** — 采集阶段应按此示例保留全部候选资讯原始文本 |
-| `reference/daily_evaluation_guide.md` | **日报评估指南** — 评估日报质量时按此文件了解方法并按其中结构输出结果 |
-| `reference/profile_template.yaml` | 用户兴趣配置模板 — 首次引导时参照生成 `config/profile.yaml` |
+| `reference/daily_collection_guide.md` | **资讯采集指南** — 仅在进入采集阶段时读取 |
+| `reference/daily_payload_example.json` | **日报 payload 示例** — 仅在生成 payload 时读取 |
+| `reference/daily_evaluation_guide.md` | **日报评估指南** — 仅在执行评估时读取 |
+| `reference/raw_capture_example.txt` | **原始采集文本示例** — 仅在需要确认原始留存格式时读取 |
+| `reference/daily_example.html` | **历史样板/视觉与交互参考** — 非主流程必读，渲染器异常时再参考 |
+| `reference/profile_template.yaml` | 用户兴趣配置模板 — 初始化或手动修复配置时参考 |
 | `reference/feedback_schema.json` | 反馈数据 JSON Schema — 定义 `data/feedback/{date}.json` 的完整结构 |
 
 ## 脚本文件
@@ -525,14 +271,10 @@ function onLeave() {
 | 兴趣漂移检测 | AI | 需要对比 profile 和行为数据的差异 |
 | 反馈数据收集 | 脚本（HTTP 服务）| 纯网络 IO，无需 AI 介入 |
 
-#### HTML 生成前自检
+执行时只需记住：
 
-在写出最终 HTML 前，至少自检以下几点：
-
-- 顶部栏日期、资讯数、用户角色已替换
-- 左栏包含：今日速览、行动建议、趋势雷达
-- 每个资讯卡片都带 `data-article-id`、`data-title`、`data-tags`
-- 每个行动建议 `<li>` 都带 `data-action-prompt`
-- 原文链接都存在且可点击
-- 页面保留 `/api/feedback` 上报逻辑，且只提交完整 session summary
-- 拓展阅读卡片使用虚线边框和灰色标签样式
+- 主技能负责判断“现在该读哪个文件”
+- 采集细节下沉到 `reference/daily_collection_guide.md`
+- 评估细节下沉到 `reference/daily_evaluation_guide.md`
+- payload 细节优先以 `reference/daily_payload_example.json` 为准
+- HTML 由 `scripts/render_daily.py` 负责稳定输出
