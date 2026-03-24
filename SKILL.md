@@ -154,6 +154,29 @@ AI 根据第一步制定的编辑策略，使用搜索工具并行抓取。
 - 搜索词应结合用户兴趣动态构造，而不是固定关键词
 - 候选池优先覆盖权威官方来源，并补足国内、研究、社区或开源信号
 - 只对少量高价值条目继续深抓正文
+- 每期日报都必须主动检查 GitHub 上最近升温较快的 AI 相关开源项目；如果窗口内存在合格项目，日报中至少保留 1-2 条 GitHub 开源信号
+
+GitHub 开源信号强制要求：
+
+1. 每次生成日报时，必须检查 GitHub Trending、GitHub Search 或其他可验证的 GitHub 热门来源
+2. 在当前技能仓库内，优先使用：
+   - `python3 scripts/fetch_github_agent_trends.py --period monthly --limit 10 --json`
+   - 该脚本复用了 `github-agent-trends` 技能的实现思路：多路 GitHub Search API 检索 + 近 30 天创建/活跃项目筛选 + 日均增星排序
+3. 如果脚本因为网络、权限、Token 或 API 限流失败，再退回 GitHub Trending / `gh search repos` 等备用方案
+4. 在最终输出或原始采集记录中，应明确说明本次 GitHub 信号采用的是：
+   - 潜力新项目月榜口径
+   - 还是当日 Trending / 普通搜索口径
+5. 优先关注：
+   - AI Agent / Agent workflow
+   - AI 编程 / coding agent
+   - RAG / retrieval / vector / memory
+   - 多模态 / computer use / GUI agent
+6. “升星比较快”优先定义为：
+   - GitHub Trending 当日或近日本身显示 stars today / 热门趋势
+   - 或 `scripts/fetch_github_agent_trends.py` 返回的高 `daily_stars` 项目
+   - 或最近 3 日内高活跃且星数明显较高的 AI 项目
+7. 如果窗口内没有足够强的官方产品新闻，也不能省略 GitHub 开源观察
+8. GitHub 条目不要只写“某仓库很火”，而要说明它解决什么问题、为什么现在值得关注、与你相关点是什么
 
 ### 第三步：筛选与加工 — AI 编辑判断
 

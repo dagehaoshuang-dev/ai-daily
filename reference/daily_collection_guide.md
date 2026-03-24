@@ -141,6 +141,12 @@ Agent Reach 安装要求：
 - 开源 / GitHub / 社区信号
 - 研究 / Benchmark / 论文 / 安全信号
 
+GitHub 开源信号不是可选项，而是默认必查项：
+
+- 每期至少检查一次 GitHub Trending 或 GitHub Search
+- 如果最近 3 日内存在明显升温的 AI 项目，日报中至少纳入 1-2 条 GitHub 开源条目
+- 如果没有纳入，必须在最终汇报中说明为什么
+
 ### 媒体源处理方式
 
 媒体源优先从频道页建立候选池，再按需进入单篇文章正文。
@@ -173,6 +179,19 @@ Agent Reach 安装要求：
 4. 对少量高价值条目再用 doctor 已确认可用的上游工具深抓正文
 5. 将深抓结果保存为 `detail` 原始数据
 6. 如果有任何来源改用备用工具，必须在原始采集记录或最终汇报里注明原因
+
+GitHub 执行建议：
+
+- 在当前技能仓库内，默认优先执行：
+  - `python3 scripts/fetch_github_agent_trends.py --period monthly --limit 10 --json`
+- 该脚本复用了 `github-agent-trends` 的实现方案：
+  - topic 搜索：`topic:ai-agent`、`topic:agentic-ai`、`topic:autonomous-agents`、`topic:llm-agents`
+  - 关键词搜索：`"AI agent"`、`"autonomous agent"`、`"coding agent"` in:name,description
+  - 活跃度筛选：`pushed:>=since`
+  - 增速排序：`daily_stars = stars / days_old`
+- 如果脚本失败，再退回 GitHub Trending 的当日 / 近日热门仓库
+- 再用 `gh search repos` 补充最近 3 日高活跃的 AI 仓库
+- 重点记录：仓库名、定位、星数或热度信号、最近 push 时间、与你相关的原因
 
 如果使用 Agent Reach：
 
@@ -244,6 +263,7 @@ Agent Reach 安装要求：
 - 已建立最近一周候选池
 - 已优先覆盖权威官方来源
 - 已补充至少一部分国内或社区 / 研究信号
+- 已检查 GitHub 热门 / 高活跃 AI 开源项目
 - 已将候选池原始文本保存到 `index`
 - 已对少量高价值条目完成 `detail` 深抓
 - 已将深抓原始文本保存到 `detail`

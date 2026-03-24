@@ -43,6 +43,7 @@
 - 只有在 doctor 显示对应渠道不可用、未配置、或覆盖不足时，才允许退回其他搜索 / 抓取方式
 - 最终汇报必须说明本次是否运行了 doctor、实际用了哪些 Agent Reach 上游工具，以及未使用时的具体原因
 - 时间窗口默认强制限定为最近 3 日；超出窗口的内容不得作为本期资讯入选
+- 每期默认还必须检查 GitHub 上最近升温较快的 AI 开源项目，并尽量在日报中保留 1-2 条 GitHub 开源信号
 
 ## 快速开始
 
@@ -148,6 +149,23 @@ python3 scripts/open_daily.py 2026-03-23 --print-only --mode auto
 - 支持端口冲突自动顺延
 - 支持局域网访问
 - 超时自动退出
+
+### `scripts/fetch_github_agent_trends.py`
+
+按 `github-agent-trends` 的实现思路抓取 GitHub 上近期开启加速的 AI Agent / coding-agent 项目。
+
+示例：
+
+```bash
+python3 scripts/fetch_github_agent_trends.py --period monthly --limit 10 --json
+```
+
+特点：
+
+- 多路 GitHub Search API 检索
+- 覆盖 topic 搜索、关键词搜索、最近活跃项目
+- 使用 `daily_stars = 总星数 / 项目年龄` 排序
+- 适合作为日报中的 GitHub 开源信号默认口径
 
 ## 配置说明
 
