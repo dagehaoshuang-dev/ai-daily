@@ -18,6 +18,7 @@
           "session": {
             "type": "object",
             "properties": {
+              "session_id": { "type": "string", "description": "本次页面访问的唯一 ID，用于服务端幂等去重" },
               "total_time_seconds": { "type": "integer", "description": "用户阅读总时长（秒）" },
               "total_events": { "type": "integer", "description": "事件总数" },
               "page_load": { "type": "string", "description": "页面加载时间（ISO8601）" }

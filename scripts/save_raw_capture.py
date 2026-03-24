@@ -3,7 +3,7 @@
 保存 AI 日报采集阶段的原始资讯文本。
 
 用途：
-1. 将搜索/抓取工具返回的原始文本落盘到 output/raw/{date}.txt
+1. 将搜索/抓取工具返回的原始文本落盘到 output/raw/{date}_{phase}.txt
 2. 可选地直接抓取 URL，并把响应原文保存下来
 
 设计原则：
@@ -141,7 +141,13 @@ def trim_noise(content: str) -> str:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="保存原始资讯抓取文本")
     parser.add_argument("date", help="日报日期，例如 2026-03-23")
-    parser.add_argument("--output", help="输出文件路径，默认 output/raw/{date}.txt")
+    parser.add_argument(
+        "--phase",
+        choices=("index", "detail"),
+        default="index",
+        help="采集阶段：index=候选池，detail=正文深抓，默认 index",
+    )
+    parser.add_argument("--output", help="输出文件路径，默认 output/raw/{date}_{phase}.txt")
     parser.add_argument("--append", action="store_true", help="追加写入已有文件")
     parser.add_argument("--section", default="capture", help="记录类型，例如 search/fetch/manual")
     parser.add_argument("--query", default="", help="本条记录对应的搜索词或抓取任务")
@@ -217,7 +223,7 @@ def render_block(args: argparse.Namespace, content: str) -> str:
 
 def main() -> int:
     args = parse_args()
-    output_path = Path(args.output) if args.output else RAW_DIR / f"{args.date}.txt"
+    output_path = Path(args.output) if args.output else RAW_DIR / f"{args.date}_{args.phase}.txt"
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     try:

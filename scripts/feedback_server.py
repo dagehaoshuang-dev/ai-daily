@@ -7,6 +7,7 @@ AI 日报反馈收集服务
 - 端口冲突自动 +1（默认 17890 起）
 """
 import http.server
+import hashlib
 import json
 import os
 import sys
@@ -71,6 +72,162 @@ def normalize_feedback_payload(body):
     return None, "invalid"
 
 
+def _is_string_list(value):
+    return isinstance(value, list) and all(isinstance(item, str) for item in value)
+
+
+def _is_article_feedback_list(value):
+    if not isinstance(value, list):
+        return False
+    for item in value:
+        if not isinstance(item, dict):
+            return False
+        if not isinstance(item.get("id"), str):
+            return False
+        if not isinstance(item.get("title"), str):
+            return False
+        tags = item.get("tags", [])
+        if tags is not None and not _is_string_list(tags):
+            return False
+    return True
+
+
+def _is_dwell_list(value):
+    if not isinstance(value, list):
+        return False
+    for item in value:
+        if not isinstance(item, dict):
+            return False
+        if not isinstance(item.get("articleId"), str):
+            return False
+        if not isinstance(item.get("title"), str):
+            return False
+        if not _is_string_list(item.get("tags", [])):
+            return False
+        if not isinstance(item.get("dwell_seconds"), int):
+            return False
+    return True
+
+
+def _is_ai_detail_list(value):
+    if not isinstance(value, list):
+        return False
+    for item in value:
+        if not isinstance(item, dict):
+            return False
+        if not isinstance(item.get("tool"), str):
+            return False
+        if not isinstance(item.get("prompt_preview"), str):
+            return False
+    return True
+
+
+def _is_tag_score_list(value):
+    if not isinstance(value, list):
+        return False
+    for item in value:
+        if not isinstance(item, dict):
+            return False
+        if not isinstance(item.get("tag"), str):
+            return False
+        if not isinstance(item.get("score"), (int, float)):
+            return False
+    return True
+
+
+def validate_feedback_summary(summary):
+    errors = []
+    if not isinstance(summary, dict):
+        return ["反馈 summary 必须是对象"]
+
+    if not isinstance(summary.get("date"), str) or not summary["date"].strip():
+        errors.append("date 缺失或不是有效字符串")
+
+    session = summary.get("session")
+    if not isinstance(session, dict):
+        errors.append("session 缺失或不是对象")
+    else:
+        session_id = session.get("session_id")
+        if session_id is not None and not isinstance(session_id, str):
+            errors.append("session.session_id 必须是字符串")
+        if not isinstance(session.get("total_time_seconds"), int):
+            errors.append("session.total_time_seconds 必须是整数")
+        if not isinstance(session.get("total_events"), int):
+            errors.append("session.total_events 必须是整数")
+        if not isinstance(session.get("page_load"), str):
+            errors.append("session.page_load 必须是字符串")
+
+    explicit_feedback = summary.get("explicit_feedback")
+    if not isinstance(explicit_feedback, dict):
+        errors.append("explicit_feedback 缺失或不是对象")
+    else:
+        if not _is_article_feedback_list(explicit_feedback.get("voted", [])):
+            errors.append("explicit_feedback.voted 结构不合法")
+        if not _is_article_feedback_list(explicit_feedback.get("bookmarked", [])):
+            errors.append("explicit_feedback.bookmarked 结构不合法")
+        if not _is_string_list(explicit_feedback.get("tags_followed", [])):
+            errors.append("explicit_feedback.tags_followed 必须是字符串数组")
+        if not _is_string_list(explicit_feedback.get("tags_unfollowed", [])):
+            errors.append("explicit_feedback.tags_unfollowed 必须是字符串数组")
+
+    implicit_feedback = summary.get("implicit_feedback")
+    if not isinstance(implicit_feedback, dict):
+        errors.append("implicit_feedback 缺失或不是对象")
+    else:
+        if not _is_dwell_list(implicit_feedback.get("dwell_ranking", [])):
+            errors.append("implicit_feedback.dwell_ranking 结构不合法")
+        if not _is_article_feedback_list(implicit_feedback.get("articles_clicked", [])):
+            errors.append("implicit_feedback.articles_clicked 结构不合法")
+        if not _is_article_feedback_list(implicit_feedback.get("articles_copied", [])):
+            errors.append("implicit_feedback.articles_copied 结构不合法")
+
+    ai_interaction = summary.get("ai_interaction")
+    if not isinstance(ai_interaction, dict):
+        errors.append("ai_interaction 缺失或不是对象")
+    else:
+        tools_used = ai_interaction.get("tools_used", {})
+        if not isinstance(tools_used, dict) or not all(
+            isinstance(key, str) and isinstance(value, int) for key, value in tools_used.items()
+        ):
+            errors.append("ai_interaction.tools_used 结构不合法")
+        if not _is_ai_detail_list(ai_interaction.get("detail", [])):
+            errors.append("ai_interaction.detail 结构不合法")
+
+    interest_profile = summary.get("interest_profile")
+    if not isinstance(interest_profile, dict):
+        errors.append("interest_profile 缺失或不是对象")
+    else:
+        if not _is_tag_score_list(interest_profile.get("tag_scores", [])):
+            errors.append("interest_profile.tag_scores 结构不合法")
+        if not _is_string_list(interest_profile.get("top_interests", [])):
+            errors.append("interest_profile.top_interests 必须是字符串数组")
+
+    all_events = summary.get("all_events")
+    if all_events is not None and not isinstance(all_events, list):
+        errors.append("all_events 必须是数组")
+
+    return errors
+
+
+def feedback_fingerprint(summary):
+    payload = json.dumps(summary, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def is_duplicate_session(existing_sessions, summary):
+    incoming_session_id = summary.get("session", {}).get("session_id")
+    if incoming_session_id:
+        for existing in existing_sessions:
+            if existing.get("session", {}).get("session_id") == incoming_session_id:
+                return True
+
+    incoming_fp = feedback_fingerprint(summary)
+    for existing in existing_sessions:
+        if feedback_fingerprint(existing) == incoming_fp:
+            return True
+    return False
+
+
 def get_local_ip_addresses():
     """返回可用于局域网访问的本机 IPv4 地址。"""
     ips = set()
@@ -115,7 +272,15 @@ class FeedbackHandler(http.server.SimpleHTTPRequestHandler):
 
     def _handle_feedback(self):
         length = int(self.headers.get("Content-Length", 0))
-        body = json.loads(self.rfile.read(length)) if length else {}
+        try:
+            body = json.loads(self.rfile.read(length)) if length else {}
+        except json.JSONDecodeError:
+            self.send_response(400)
+            self.send_header("Content-Type", "application/json")
+            self._cors_headers()
+            self.end_headers()
+            self.wfile.write(b'{"ok":false,"error":"invalid_json"}')
+            return
         normalized, payload_type = normalize_feedback_payload(body)
 
         if payload_type == "event_batch":
@@ -134,6 +299,20 @@ class FeedbackHandler(http.server.SimpleHTTPRequestHandler):
             self.wfile.write(b'{"ok":false,"error":"invalid_feedback_payload"}')
             return
 
+        errors = validate_feedback_summary(normalized)
+        if errors:
+            self.send_response(400)
+            self.send_header("Content-Type", "application/json")
+            self._cors_headers()
+            self.end_headers()
+            self.wfile.write(
+                json.dumps(
+                    {"ok": False, "error": "invalid_feedback_summary", "details": errors},
+                    ensure_ascii=False,
+                ).encode("utf-8")
+            )
+            return
+
         date = normalized.get("date", time.strftime("%Y-%m-%d"))
         filepath = FEEDBACK_DIR / f"{date}.json"
 
@@ -146,6 +325,16 @@ class FeedbackHandler(http.server.SimpleHTTPRequestHandler):
                 existing = json.loads(filepath.read_text(encoding="utf-8"))
             except (json.JSONDecodeError, IOError):
                 pass
+        if not isinstance(existing, dict) or not isinstance(existing.get("sessions"), list):
+            existing = {"sessions": []}
+
+        if is_duplicate_session(existing["sessions"], normalized):
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self._cors_headers()
+            self.end_headers()
+            self.wfile.write(b'{"ok":true,"deduped":true}')
+            return
 
         existing["sessions"].append(normalized)
         filepath.write_text(
@@ -244,10 +433,6 @@ def main():
                 print(f"       最后一次错误: {port_error}", file=sys.stderr)
         sys.exit(1)
 
-    # 写入端口文件
-    PORT_FILE.parent.mkdir(parents=True, exist_ok=True)
-    PORT_FILE.write_text(str(port))
-
     # 超时自动退出
     def auto_exit():
         print(f"\n⏰ 已运行 {timeout_hours} 小时，自动停止。")
@@ -259,6 +444,9 @@ def main():
     # 启动服务
     handler = partial(FeedbackHandler, directory=str(OUTPUT_DIR))
     server = http.server.HTTPServer((bind_host, port), handler)
+
+    PORT_FILE.parent.mkdir(parents=True, exist_ok=True)
+    PORT_FILE.write_text(str(port))
 
     print("✅ AI 日报服务已启动")
     print(f"   监听地址: {bind_host}:{port}")
