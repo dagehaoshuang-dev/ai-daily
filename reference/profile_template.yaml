@@ -1,71 +1,31 @@
-# AI 日报 — 用户兴趣配置模板
-# 首次使用 /ai-daily 时根据用户选择自动生成
+# 日报 — 用户兴趣配置模板
+# 首次使用 /daily 时根据用户选择自动生成
 # 用户可随时手动编辑，下次运行即生效
 
 # ━━ 角色 ━━
-# 影响 AI 摘要的解读角度和行动建议的方向
-# 可选值：技术研发 | 产品经理 | 技术管理 | AI 研究员 | 市场/运营 | 综合关注
-role: "技术研发"
+# 影响摘要的解读角度和行动建议的方向
+# 由初始化向导根据用户领域自动推断，也可手动填写
+role: ""
 
-# 角色补充描述（可选，帮助 AI 更精准解读）
-# 示例："主要做 AI Agent 开发，技术栈是 Python + LangChain"
+# 角色补充描述（可选，帮助更精准解读）
+# 示例："负责供应链数字化转型，关注物流优化和智能仓储"
 role_context: ""
 
 # ━━ 关注话题 ━━
 # priority: high（必选）| medium（有则采）| low（偶尔看看）
-topics:
-  - name: "大模型"
-    priority: high
-    keywords:
-      - "LLM"
-      - "GPT"
-      - "Claude"
-      - "Gemini"
-      - "Llama"
-      - "大语言模型"
-      - "foundation model"
-
-  - name: "AI Agent"
-    priority: high
-    keywords:
-      - "AI Agent"
-      - "Agent Framework"
-      - "LangChain"
-      - "LangGraph"
-      - "CrewAI"
-      - "AutoGen"
-      - "智能体"
-
-  - name: "开源"
-    priority: medium
-    keywords:
-      - "开源模型"
-      - "开源框架"
-      - "Hugging Face"
-      - "open source LLM"
-      - "GitHub Trending AI"
-
-  - name: "RAG"
-    priority: medium
-    keywords:
-      - "RAG"
-      - "检索增强生成"
-      - "向量数据库"
-      - "Embedding"
-
-  - name: "AI 编程"
-    priority: medium
-    keywords:
-      - "AI coding"
-      - "Copilot"
-      - "Claude Code"
-      - "Cursor"
-      - "代码生成"
+# 由初始化向导根据对话内容自动生成，也可手动编辑
+topics: []
+  # - name: "话题名称"
+  #   priority: high
+  #   keywords:
+  #     - "关键词1"
+  #     - "关键词2"
+  #     - "关键词3"
 
 # 不感兴趣的话题（采集时排除）
-exclude_topics:
-  - "加密货币"
-  - "NFT"
+exclude_topics: []
+  # - "不感兴趣的话题1"
+  # - "不感兴趣的话题2"
 
 # ━━ 日报偏好 ━━
 daily:
@@ -80,3 +40,10 @@ server:
   host: "0.0.0.0"            # 监听地址：127.0.0.1 仅本机 | 0.0.0.0 允许局域网访问
   timeout_hours: 2           # 自动停止时间（小时）
   port: 17890                # 起始端口（冲突自动 +1）
+
+# ━━ 信息来源（由初始化向导自动探索填入）━━
+sources:
+  direct: []                 # 直达来源页（官方博客、changelog、社区页等）
+    # - "https://example.com/blog"
+  search_seeds: []           # 采集阶段复用的种子搜索词
+    # - "领域关键词 最新进展"

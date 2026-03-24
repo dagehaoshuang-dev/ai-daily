@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AI 日报 · 2026-03-21</title>
+  <title>日报 · 2026-03-21</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
@@ -100,7 +100,7 @@
   <header class="flex-shrink-0 bg-white border-b border-gray-100 px-8 py-4">
     <div class="flex items-center justify-between max-w-[1600px] mx-auto">
       <div class="flex items-center gap-4">
-        <h1 class="text-2xl font-bold text-primary"><i class="fa-solid fa-robot text-accent mr-2"></i>你的 AI 日报</h1>
+        <h1 class="text-2xl font-bold text-primary"><i class="fa-solid fa-newspaper text-accent mr-2"></i>你的日报</h1>
         <span class="text-gray-300">|</span>
         <p class="text-gray-500 text-sm"><i class="fa-regular fa-calendar mr-1"></i>2026年3月21日 · 周六</p>
         <span class="bg-accent/10 text-accent text-xs font-medium px-2.5 py-1 rounded-full">15 条资讯</span>
@@ -618,7 +618,7 @@
     });
     wrap.appendChild(menu);
     const icon = document.createElement('span'); icon.className = 'ai-trigger-icon';
-    icon.innerHTML = '<i class="fa-solid fa-paper-plane"></i>'; icon.title = '发送至 AI 工具';
+    icon.innerHTML = '<i class="fa-solid fa-paper-plane"></i>'; icon.title = '发送至工具';
     wrap.appendChild(icon); item.appendChild(wrap);
     let ht = null;
     function show() { clearTimeout(ht); menu.classList.add('open'); }
@@ -627,17 +627,17 @@
     menu.addEventListener('mouseenter', show); menu.addEventListener('mouseleave', hide);
   });
 
-  // 1c. 卡片 AI 深入
+  // 1c. 卡片 深入分析
   cards.forEach(card => {
     const title = card.dataset.title; const tags = JSON.parse(card.dataset.tags || '[]');
     const se = card.querySelector('.ai-gradient-line'); const s = se ? se.textContent.trim().substring(0, 200) : '';
     const re = card.querySelector('[class*="F8F7FF"]'); const r = re ? re.textContent.trim() : '';
-    const dp = '我在阅读 AI 日报时看到了这条资讯，请帮我深入分析：\n\n标题：' + title + '\n标签：' + tags.join(' ') + '\n摘要：' + s + '\n' + (r ? '与我的关联：' + r + '\n' : '') + '\n请从以下角度展开：\n1. 技术细节和背景\n2. 短期和长期影响\n3. 我应如何应对\n4. 推荐学习资源';
+    const dp = '我在阅读日报时看到了这条资讯，请帮我深入分析：\n\n标题：' + title + '\n标签：' + tags.join(' ') + '\n摘要：' + s + '\n' + (r ? '与我的关联：' + r + '\n' : '') + '\n请从以下角度展开：\n1. 技术细节和背景\n2. 短期和长期影响\n3. 我应如何应对\n4. 推荐学习资源';
     const ab = card.querySelector('.flex.items-center.justify-between.mt-2');
     if (ab) {
       const wrap = document.createElement('span'); wrap.className = 'card-ai-wrap';
       const icon = document.createElement('span'); icon.className = 'card-ai-btn';
-      icon.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles text-[10px]"></i>AI 深入'; wrap.appendChild(icon);
+      icon.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles text-[10px]"></i>深入分析'; wrap.appendChild(icon);
       const menu = document.createElement('div'); menu.className = 'ai-menu';
       AI_TOOLS.forEach((tool, i) => {
         if (i > 0 && tool.id === 'copy') menu.insertAdjacentHTML('beforeend', '<div class="ai-menu-sep"></div>');
@@ -722,9 +722,9 @@
   function onLeave() {
     const summary = buildSummary();
     if (IS_HTTP) navigator.sendBeacon('/api/feedback', JSON.stringify(summary));
-    try { const st = JSON.parse(localStorage.getItem('ai_daily_feedback') || '[]'); st.push(summary); if (st.length > 30) st.splice(0, st.length - 30); localStorage.setItem('ai_daily_feedback', JSON.stringify(st)); } catch(e) {}
+    try { const st = JSON.parse(localStorage.getItem('daily_feedback') || '[]'); st.push(summary); if (st.length > 30) st.splice(0, st.length - 30); localStorage.setItem('daily_feedback', JSON.stringify(st)); } catch(e) {}
     console.log('\n%c╔══════════════════════════════════════════════════╗', 'color:#6C5CE7');
-    console.log('%c║     AI 日报反馈汇总 · ' + DATE + '                  ║', 'color:#6C5CE7;font-weight:bold');
+    console.log('%c║     日报反馈汇总 · ' + DATE + '                  ║', 'color:#6C5CE7;font-weight:bold');
     console.log('%c╚══════════════════════════════════════════════════╝', 'color:#6C5CE7');
     console.log(JSON.stringify(summary, null, 2));
   }
@@ -733,7 +733,7 @@
 
   // 启动提示
   console.log('%c╔══════════════════════════════════════════════════╗', 'color:#6C5CE7');
-  console.log('%c║     AI 日报反馈采集已启动 · ' + DATE + '            ║', 'color:#6C5CE7;font-weight:bold');
+  console.log('%c║     日报反馈采集已启动 · ' + DATE + '            ║', 'color:#6C5CE7;font-weight:bold');
   console.log('%c╚══════════════════════════════════════════════════╝', 'color:#6C5CE7');
   console.log('%c模式：' + (IS_HTTP ? 'HTTP（反馈自动回流）' : 'File（仅控制台+localStorage）'), 'color:#333;font-weight:bold');
   console.log('  📌 隐式 — 停留时长、原文点击、文本复制');

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-AI 日报反馈收集服务
+日报反馈收集服务
 - 静态文件服务：serve output/ 目录
 - 反馈接收：POST /api/feedback → 写入 data/feedback/{date}.json
 - 自动超时退出（默认 2 小时）
@@ -24,7 +24,7 @@ DEFAULT_HOST = "0.0.0.0"
 
 def resolve_root_dir():
     """优先从环境变量/工作目录推断 Skill 根目录，避免依赖固定层级。"""
-    env_root = os.environ.get("AI_DAILY_ROOT")
+    env_root = os.environ.get("DAILY_ROOT") or os.environ.get("AI_DAILY_ROOT")
     candidates = []
     if env_root:
         candidates.append(Path(env_root).expanduser())
@@ -448,7 +448,7 @@ def main():
     PORT_FILE.parent.mkdir(parents=True, exist_ok=True)
     PORT_FILE.write_text(str(port))
 
-    print("✅ AI 日报服务已启动")
+    print("✅ 日报服务已启动")
     print(f"   监听地址: {bind_host}:{port}")
     print(f"   本机访问: http://localhost:{port}")
     if bind_host in {"0.0.0.0", ""}:

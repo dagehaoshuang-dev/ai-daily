@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "AI 日报反馈数据",
+  "title": "日报反馈数据",
   "description": "由前端 JS 在页面离开时生成完整 session summary，写入 data/feedback/{date}.json，供下次日报生成时读取；中途事件批量包不应写入正式反馈文件",
   "type": "object",
   "properties": {
@@ -48,7 +48,7 @@
                 "type": "array",
                 "description": "用户主动关注的标签",
                 "items": { "type": "string" },
-                "example": ["#Agent", "#RAG"]
+                "example": ["#行业动态", "#开源"]
               },
               "tags_unfollowed": {
                 "type": "array",
@@ -125,7 +125,7 @@
                 "type": "array",
                 "description": "Top 5 兴趣标签",
                 "items": { "type": "string" },
-                "example": ["#Agent", "#大模型", "#RAG", "#开源", "#AI编程"]
+                "example": ["#行业动态", "#平台更新", "#开源", "#合规", "#技术趋势"]
               }
             }
           },

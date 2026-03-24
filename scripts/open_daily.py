@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-打开 AI 日报页面。
+打开日报页面。
 
 优先使用本地 HTTP 服务地址（如果 data/.server_port 存在），
 否则回退到 file:// 打开本地 HTML 文件。
@@ -15,7 +15,7 @@ from pathlib import Path
 
 
 def resolve_root_dir() -> Path:
-    env_root = os.environ.get("AI_DAILY_ROOT")
+    env_root = os.environ.get("DAILY_ROOT") or os.environ.get("AI_DAILY_ROOT")
     candidates = []
     if env_root:
         candidates.append(Path(env_root).expanduser())
@@ -91,7 +91,7 @@ def open_target(target: str) -> None:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Open a generated AI daily page")
+    parser = argparse.ArgumentParser(description="Open a generated daily page")
     parser.add_argument("date", nargs="?", help="日报日期，格式 YYYY-MM-DD；默认打开最新一份")
     parser.add_argument(
         "--mode",

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-保存 AI 日报采集阶段的原始资讯文本。
+保存日报采集阶段的原始资讯文本。
 
 用途：
 1. 将搜索/抓取工具返回的原始文本落盘到 output/raw/{date}_{phase}.txt
@@ -177,7 +177,7 @@ def load_content(args: argparse.Namespace) -> str:
         request = Request(
             args.url,
             headers={
-                "User-Agent": "Mozilla/5.0 (compatible; ai-daily-raw-capture/1.0)"
+                "User-Agent": "Mozilla/5.0 (compatible; daily-raw-capture/1.0)"
             },
         )
         with urlopen(request, timeout=20) as response:

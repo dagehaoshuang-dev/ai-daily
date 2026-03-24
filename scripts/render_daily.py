@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-AI 日报 HTML 渲染器
+日报 HTML 渲染器
 
 输入：output/daily/{date}.json
 输出：output/daily/{date}.html
@@ -385,12 +385,21 @@ def render_html(payload: dict[str, Any]) -> str:
     role = h(meta.get("role", ""))
     generated_time = h(meta.get("generated_time", ""))
 
+    default_tools = [
+        {"id": "claude", "name": "Claude", "icon": "fa-solid fa-message", "btnClass": "btn-claude", "url": "https://claude.ai/new?q={prompt}"},
+        {"id": "chatgpt", "name": "ChatGPT", "icon": "fa-brands fa-openai", "btnClass": "btn-chatgpt", "url": "https://chatgpt.com/?q={prompt}"},
+        {"id": "deepseek", "name": "DeepSeek", "icon": "fa-solid fa-magnifying-glass", "btnClass": "btn-deepseek", "url": "https://chat.deepseek.com/?q={prompt}"},
+        {"id": "copy", "name": "\u590d\u5236 Prompt", "icon": "fa-regular fa-copy", "btnClass": "btn-copy", "url": None},
+    ]
+    tools_data = payload.get("tools", default_tools)
+    tools_js = json.dumps(tools_data, ensure_ascii=False)
+
     return f"""<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AI 日报 · {title_date}</title>
+  <title>日报 · {title_date}</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {{
@@ -487,7 +496,7 @@ def render_html(payload: dict[str, Any]) -> str:
   <header class="flex-shrink-0 bg-white border-b border-gray-100 px-8 py-4">
     <div class="flex items-center justify-between max-w-[1600px] mx-auto">
       <div class="flex items-center gap-4">
-        <h1 class="text-2xl font-bold text-primary"><i class="fa-solid fa-robot text-accent mr-2"></i>你的 AI 日报</h1>
+        <h1 class="text-2xl font-bold text-primary"><i class="fa-solid fa-newspaper text-accent mr-2"></i>你的日报</h1>
         <span class="text-gray-300">|</span>
         <p class="text-gray-500 text-sm"><i class="fa-regular fa-calendar mr-1"></i>{date_label}</p>
         <span class="bg-accent/10 text-accent text-xs font-medium px-2.5 py-1 rounded-full">{item_count} 条资讯</span>
@@ -569,12 +578,7 @@ def render_html(payload: dict[str, Any]) -> str:
     : ('session-' + Date.now() + '-' + Math.random().toString(16).slice(2));
   let leaveHandled = false;
 
-  const AI_TOOLS = [
-    {{ id: 'claude', name: 'Claude', icon: 'fa-solid fa-message', btnClass: 'btn-claude', url: 'https://claude.ai/new?q={{prompt}}' }},
-    {{ id: 'chatgpt', name: 'ChatGPT', icon: 'fa-brands fa-openai', btnClass: 'btn-chatgpt', url: 'https://chatgpt.com/?q={{prompt}}' }},
-    {{ id: 'deepseek', name: 'DeepSeek', icon: 'fa-solid fa-magnifying-glass', btnClass: 'btn-deepseek', url: 'https://chat.deepseek.com/?q={{prompt}}' }},
-    {{ id: 'copy', name: '复制 Prompt', icon: 'fa-regular fa-copy', btnClass: 'btn-copy', url: null }}
-  ];
+  const AI_TOOLS = {tools_js};
 
   function ts() {{ return new Date().toISOString(); }}
   function log(event) {{ events.push(event); console.log('%c[反馈]%c ' + event.type, 'color:#6C5CE7;font-weight:bold', 'color:#333', event); }}
@@ -663,7 +667,7 @@ def render_html(payload: dict[str, Any]) -> str:
     }});
     wrap.appendChild(menu);
     const icon = document.createElement('span'); icon.className = 'ai-trigger-icon';
-    icon.innerHTML = '<i class=\"fa-solid fa-paper-plane\"></i>'; icon.title = '发送至 AI 工具';
+    icon.innerHTML = '<i class=\"fa-solid fa-paper-plane\"></i>'; icon.title = '发送至工具';
     wrap.appendChild(icon); item.appendChild(wrap);
     let ht = null;
     function show() {{ clearTimeout(ht); menu.classList.add('open'); }}
@@ -676,12 +680,12 @@ def render_html(payload: dict[str, Any]) -> str:
     const title = card.dataset.title; const tags = parseTags(card.dataset.tags || '');
     const se = card.querySelector('.ai-gradient-line'); const s = se ? se.textContent.trim().substring(0, 200) : '';
     const re = card.querySelector('[class*=\"F8F7FF\"]'); const r = re ? re.textContent.trim() : '';
-    const dp = '我在阅读 AI 日报时看到了这条资讯，请帮我深入分析：\\n\\n标题：' + title + '\\n标签：' + tags.join(' ') + '\\n摘要：' + s + '\\n' + (r ? '与我的关联：' + r + '\\n' : '') + '\\n请从以下角度展开：\\n1. 技术细节和背景\\n2. 短期和长期影响\\n3. 我应如何应对\\n4. 推荐学习资源';
+    const dp = '我在阅读日报时看到了这条资讯，请帮我深入分析：\\n\\n标题：' + title + '\\n标签：' + tags.join(' ') + '\\n摘要：' + s + '\\n' + (r ? '与我的关联：' + r + '\\n' : '') + '\\n请从以下角度展开：\\n1. 技术细节和背景\\n2. 短期和长期影响\\n3. 我应如何应对\\n4. 推荐学习资源';
     const ab = card.querySelector('.flex.items-center.justify-between.mt-2');
     if (ab) {{
       const wrap = document.createElement('span'); wrap.className = 'card-ai-wrap';
       const icon = document.createElement('span'); icon.className = 'card-ai-btn';
-      icon.innerHTML = '<i class=\"fa-solid fa-wand-magic-sparkles text-[10px]\"></i>AI 深入'; wrap.appendChild(icon);
+      icon.innerHTML = '<i class=\"fa-solid fa-wand-magic-sparkles text-[10px]\"></i>深入分析'; wrap.appendChild(icon);
       const menu = document.createElement('div'); menu.className = 'ai-menu';
       AI_TOOLS.forEach((tool, i) => {{
         if (i > 0 && tool.id === 'copy') menu.insertAdjacentHTML('beforeend', '<div class=\"ai-menu-sep\"></div>');
@@ -770,9 +774,9 @@ def render_html(payload: dict[str, Any]) -> str:
     leaveHandled = true;
     const summary = buildSummary();
     if (IS_HTTP) navigator.sendBeacon('/api/feedback', JSON.stringify(summary));
-    try {{ const st = JSON.parse(localStorage.getItem('ai_daily_feedback') || '[]'); st.push(summary); if (st.length > 30) st.splice(0, st.length - 30); localStorage.setItem('ai_daily_feedback', JSON.stringify(st)); }} catch(e) {{}}
+    try {{ const st = JSON.parse(localStorage.getItem('daily_feedback') || '[]'); st.push(summary); if (st.length > 30) st.splice(0, st.length - 30); localStorage.setItem('daily_feedback', JSON.stringify(st)); }} catch(e) {{}}
     console.log('\\n%c╔══════════════════════════════════════════════════╗', 'color:#6C5CE7');
-    console.log('%c║     AI 日报反馈汇总 · ' + DATE + '                  ║', 'color:#6C5CE7;font-weight:bold');
+    console.log('%c║     日报反馈汇总 · ' + DATE + '                  ║', 'color:#6C5CE7;font-weight:bold');
     console.log('%c╚══════════════════════════════════════════════════╝', 'color:#6C5CE7');
     console.log(JSON.stringify(summary, null, 2));
   }}
@@ -780,12 +784,12 @@ def render_html(payload: dict[str, Any]) -> str:
   window.addEventListener('beforeunload', onLeave, {{ capture: true }});
 
   console.log('%c╔══════════════════════════════════════════════════╗', 'color:#6C5CE7');
-  console.log('%c║     AI 日报反馈采集已启动 · ' + DATE + '            ║', 'color:#6C5CE7;font-weight:bold');
+  console.log('%c║     日报反馈采集已启动 · ' + DATE + '            ║', 'color:#6C5CE7;font-weight:bold');
   console.log('%c╚══════════════════════════════════════════════════╝', 'color:#6C5CE7');
   console.log('%c模式：' + (IS_HTTP ? 'HTTP（反馈自动回流）' : 'File（仅控制台+localStorage）'), 'color:#333;font-weight:bold');
   console.log('  📌 隐式 — 停留时长、原文点击、文本复制');
   console.log('  👆 显式 — 投票(▲)、收藏(🔖)、标签关注');
-  console.log('  🤖 AI — 行动建议/AI深入 发送至工具');
+  console.log('  🤖 AI — 行动建议/深入分析 发送至工具');
   console.log('%c关闭页面时自动输出汇总\\n', 'color:#888');
 }})();
 </script>
@@ -795,7 +799,7 @@ def render_html(payload: dict[str, Any]) -> str:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Render AI daily JSON into HTML")
+    parser = argparse.ArgumentParser(description="Render daily JSON into HTML")
     parser.add_argument("input", help="Input JSON file path")
     parser.add_argument(
         "--output",

@@ -1,10 +1,10 @@
-# AI Daily Skill
+# Daily Report Skill
 
-一个用于生成 AI 资讯日报的 Skill 包。
+一个用于生成资讯日报的 Skill 包。
 
 它的核心目标是：
 
-- 根据用户画像生成个性化 AI 日报
+- 根据用户画像生成个性化日报
 - 使用结构化 JSON 作为中间层
 - 通过模板化渲染稳定输出 HTML 页面
 - 启动本地反馈服务，采集阅读行为
@@ -149,23 +149,6 @@ python3 scripts/open_daily.py 2026-03-23 --print-only --mode auto
 - 支持端口冲突自动顺延
 - 支持局域网访问
 - 超时自动退出
-
-### `scripts/fetch_github_agent_trends.py`
-
-按 `github-agent-trends` 的实现思路抓取 GitHub 上近期开启加速的 AI Agent / coding-agent 项目。
-
-示例：
-
-```bash
-python3 scripts/fetch_github_agent_trends.py --period monthly --limit 10 --json
-```
-
-特点：
-
-- 多路 GitHub Search API 检索
-- 覆盖 topic 搜索、关键词搜索、最近活跃项目
-- 使用 `daily_stars = 总星数 / 项目年龄` 排序
-- 适合作为日报中的 GitHub 开源信号默认口径
 
 ## 配置说明
 

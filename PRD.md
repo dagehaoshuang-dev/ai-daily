@@ -1,17 +1,17 @@
-# AI 日报技能 PRD
+# 日报技能 PRD
 
 ## 1. 文档信息
 
-- 产品名称：AI 日报技能
+- 产品名称：日报技能
 - 文档目标：沉淀当前技能的产品目标、能力范围、关键决策、流程设计、数据设计与评审重点，作为后续审核与迭代依据
 - 当前阶段：可运行原型 / 技能化方案稳定期
-- 适用范围：OpenClaw / Codex 类 Skill 场景下的 AI 日报生成与质量评估
+- 适用范围：OpenClaw / Codex 类 Skill 场景下的日报生成与质量评估
 
 ---
 
 ## 2. 背景与问题
 
-用户希望获得一份既有行业价值、又贴合个人兴趣的 AI 资讯日报，而不是一份泛泛的新闻聚合页。传统做法存在几个问题：
+用户希望获得一份既有行业价值、又贴合个人兴趣的资讯日报，而不是一份泛泛的新闻聚合页。传统做法存在几个问题：
 
 - 资讯源噪音大，头部事件、中文信号、研究信号、开源信号容易失衡
 - 直接让模型整页手写 HTML，结构和交互容易漂移
@@ -27,7 +27,7 @@
 
 ### 3.1 核心目标
 
-1. 生成一份个性化 AI 日报
+1. 生成一份个性化日报
 2. 让日报尽量优先命中用户当前真正关心的方向
 3. 通过结构化中间层和模板渲染，稳定输出 HTML 成品
 4. 保留采集原始数据，便于复盘和后续质量审计
@@ -57,13 +57,13 @@
 - 技术研发
 - 产品经理
 - 技术管理者
-- AI 研究员
+- 行业研究员
 - 市场 / 运营
 - 综合关注用户
 
 ### 4.2 用户核心诉求
 
-- 快速知道最近一周 AI 圈里最值得看的事
+- 快速知道最近一周 领域内最值得看的事
 - 希望内容和自己角色、工作场景、兴趣方向有关
 - 不是只要“摘要”，还希望知道“为什么和我有关”
 - 希望日报越来越懂自己，而不是每次都从零开始
@@ -72,15 +72,17 @@
 
 ## 5. 产品定位
 
-AI 日报技能不是单纯的新闻摘要器，而是一个：
+日报技能不是单纯的新闻摘要器，而是一个：
 
-- 面向个人兴趣的 AI 资讯编辑技能
+- 面向个人兴趣的资讯编辑技能
 - 兼顾“生成”和“评估”的双模式技能
 - 以原始采集证据链、结构化中间层、稳定渲染、反馈闭环为基础的日报工作流
 
 一句话定位：
 
-> 一个能为具体用户持续生成、持续学习、并可被审计质量的 AI 日报技能。
+> 一个能为具体用户持续生成、持续学习、并可被审计质量的日报技能。
+
+本技能不限于特定领域，可服务于任意行业的资讯日报需求。
 
 ---
 
@@ -88,7 +90,7 @@ AI 日报技能不是单纯的新闻摘要器，而是一个：
 
 ### 6.0 模式零：初始化画像
 
-初始化由独立技能 `/ai-daily-init` 负责，不再内嵌在 `/ai-daily` 主流程中。
+初始化由独立技能 `/daily-init` 负责，不再内嵌在 `/daily` 主流程中。
 
 初始化包括：
 
@@ -105,7 +107,7 @@ AI 日报技能不是单纯的新闻摘要器，而是一个：
 生成日报包括：
 
 1. 检查 `config/profile.yaml` 是否存在
-2. 若不存在，则停止当前流程并引导用户运行 `/ai-daily-init`
+2. 若不存在，则停止当前流程并引导用户运行 `/daily-init`
 3. 读取用户画像和最近 7 天反馈
 4. 执行资讯采集
 5. 进行筛选、排序、分级、个性化解读
@@ -197,11 +199,11 @@ AI 日报技能不是单纯的新闻摘要器，而是一个：
 
 ### 7.6 初始化从主技能中拆出
 
-当前方案不再让 `/ai-daily` 在首次运行时直接展开交互式配置面板，而是改成：
+当前方案不再让 `/daily` 在首次运行时直接展开交互式配置面板，而是改成：
 
-1. `/ai-daily` 只负责检查画像是否存在
-2. 若缺失 `config/profile.yaml`，则中止本次日报生成，并明确引导用户运行 `/ai-daily-init`
-3. `/ai-daily-init` 作为独立初始化技能，负责完成环境检查、画像推断、群聊热身和来源探索
+1. `/daily` 只负责检查画像是否存在
+2. 若缺失 `config/profile.yaml`，则中止本次日报生成，并明确引导用户运行 `/daily-init`
+3. `/daily-init` 作为独立初始化技能，负责完成环境检查、画像推断、群聊热身和来源探索
 
 这样做的原因是：
 
@@ -218,7 +220,7 @@ AI 日报技能不是单纯的新闻摘要器，而是一个：
 
 ```mermaid
 flowchart TD
-    A["用户触发 /ai-daily-init"] --> B["检查已有 profile.yaml"]
+    A["用户触发 /daily-init"] --> B["检查已有 profile.yaml"]
     B --> C["环境检查: Python3 / Agent Reach / 飞书工具"]
     C --> D["飞书知识库读取与画像推断"]
     D --> E["群聊绑定"]
@@ -232,8 +234,8 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    A["用户触发 /ai-daily"] --> B["检查 profile.yaml"]
-    B -->|不存在| C["停止当前流程并提示运行 /ai-daily-init"]
+    A["用户触发 /daily"] --> B["检查 profile.yaml"]
+    B -->|不存在| C["停止当前流程并提示运行 /daily-init"]
     B -->|存在| D["读取 profile 与最近7天反馈"]
     D --> E["读取采集指南"]
     E --> F["优先使用 Agent Reach 建立 index 候选池"]
@@ -250,7 +252,7 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    A["用户触发 /ai-daily evaluate"] --> B["定位日报 JSON / HTML"]
+    A["用户触发 /daily evaluate"] --> B["定位日报 JSON / HTML"]
     B --> C["读取 profile 与最近7天反馈"]
     C --> D["读取 daily_evaluation_guide.md"]
     D --> E["构建通用 Ground Truth"]
@@ -297,9 +299,9 @@ flowchart TD
 
 - Agent Reach 的 RSS、网页搜索、社区搜索、GitHub、微博等可用渠道
 - 官方 News / Blog 列表页
-- 媒体 AI 频道页
+- 用户配置的一手来源页
+- 领域相关社区页
 - GitHub Trending / Release
-- Hugging Face Blog / 社区页
 
 ### 9.3 采集产物
 
@@ -453,21 +455,21 @@ sources:
 
 ### 13.1 关键文件
 
-- [SKILL.md](/Users/user/Documents/project/ai-daily/SKILL.md)
-- [skills/ai-daily-init.md](/Users/user/Documents/project/ai-daily/skills/ai-daily-init.md)
-- [reference/daily_collection_guide.md](/Users/user/Documents/project/ai-daily/reference/daily_collection_guide.md)
-- [reference/daily_evaluation_guide.md](/Users/user/Documents/project/ai-daily/reference/daily_evaluation_guide.md)
-- [reference/daily_example.html](/Users/user/Documents/project/ai-daily/reference/daily_example.html)
-- [reference/daily_payload_example.json](/Users/user/Documents/project/ai-daily/reference/daily_payload_example.json)
-- [reference/raw_capture_example.txt](/Users/user/Documents/project/ai-daily/reference/raw_capture_example.txt)
-- [reference/feedback_schema.json](/Users/user/Documents/project/ai-daily/reference/feedback_schema.json)
+- [SKILL.md](/Users/user/Documents/project/daily/SKILL.md)
+- [skills/daily-init.md](/Users/user/Documents/project/daily/skills/daily-init.md)
+- [reference/daily_collection_guide.md](/Users/user/Documents/project/daily/reference/daily_collection_guide.md)
+- [reference/daily_evaluation_guide.md](/Users/user/Documents/project/daily/reference/daily_evaluation_guide.md)
+- [reference/daily_example.html](/Users/user/Documents/project/daily/reference/daily_example.html)
+- [reference/daily_payload_example.json](/Users/user/Documents/project/daily/reference/daily_payload_example.json)
+- [reference/raw_capture_example.txt](/Users/user/Documents/project/daily/reference/raw_capture_example.txt)
+- [reference/feedback_schema.json](/Users/user/Documents/project/daily/reference/feedback_schema.json)
 
 ### 13.2 关键脚本
 
-- [scripts/render_daily.py](/Users/user/Documents/project/ai-daily/scripts/render_daily.py)
-- [scripts/open_daily.py](/Users/user/Documents/project/ai-daily/scripts/open_daily.py)
-- [scripts/feedback_server.py](/Users/user/Documents/project/ai-daily/scripts/feedback_server.py)
-- [scripts/save_raw_capture.py](/Users/user/Documents/project/ai-daily/scripts/save_raw_capture.py)
+- [scripts/render_daily.py](/Users/user/Documents/project/daily/scripts/render_daily.py)
+- [scripts/open_daily.py](/Users/user/Documents/project/daily/scripts/open_daily.py)
+- [scripts/feedback_server.py](/Users/user/Documents/project/daily/scripts/feedback_server.py)
+- [scripts/save_raw_capture.py](/Users/user/Documents/project/daily/scripts/save_raw_capture.py)
 
 ---
 
@@ -529,7 +531,7 @@ sources:
 
 ## 17. 结论
 
-AI 日报技能已经从“单次生成页面的提示词型方案”，演进为一套更完整的技能工作流：
+日报技能已经从“单次生成页面的提示词型方案”，演进为一套更完整的技能工作流：
 
 - 采集上采用 Agent Reach 优先的两阶段方案
 - 生成上采用 JSON 到 HTML 的稳定渲染
