@@ -387,6 +387,12 @@ def load_server_config():
             cfg = {}
             for line in text.splitlines():
                 line = line.strip()
+                # 跳过纯注释行
+                if not line or line.startswith("#"):
+                    continue
+                # 去掉行内注释（空格+#）
+                if " #" in line:
+                    line = line[: line.index(" #")].rstrip()
                 if line.startswith("timeout_hours:"):
                     try:
                         cfg["timeout_hours"] = float(line.split(":")[1].strip())

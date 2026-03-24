@@ -68,11 +68,30 @@ def read_server_port() -> int | None:
         return None
 
 
+def _is_server_alive(port: int, timeout: float = 1.0) -> bool:
+    """Check if the feedback server is actually responding."""
+    try:
+        import urllib.request
+        url = f"http://localhost:{port}/"
+        req = urllib.request.Request(url, method="HEAD")
+        urllib.request.urlopen(req, timeout=timeout)
+        return True
+    except Exception:
+        return False
+
+
 def build_target(daily_file: Path, mode: str) -> str:
     port = read_server_port()
     if mode in {"auto", "http"} and port:
-        return f"http://localhost:{port}/daily/{daily_file.name}"
-    if mode == "http":
+        if _is_server_alive(port):
+            return f"http://localhost:{port}/daily/{daily_file.name}"
+        if mode == "http":
+            raise RuntimeError(
+                f"data/.server_port 指向端口 {port}，但服务未响应。"
+                "请确认 feedback_server.py 是否仍在运行。"
+            )
+        # mode == "auto": server not alive, fall back to file
+    elif mode == "http":
         raise RuntimeError("未检测到 data/.server_port，无法构建 HTTP 访问地址")
     return daily_file.resolve().as_uri()
 
