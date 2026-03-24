@@ -86,17 +86,32 @@ AI 日报技能不是单纯的新闻摘要器，而是一个：
 
 ## 6. 功能范围
 
+### 6.0 模式零：初始化画像
+
+初始化由独立技能 `/ai-daily-init` 负责，不再内嵌在 `/ai-daily` 主流程中。
+
+初始化包括：
+
+1. 环境检查（Python3、Agent Reach、飞书相关工具）
+2. 飞书知识库读取与初始画像推断
+3. 群聊绑定
+4. 最近 7 天群聊历史热身
+5. 来源探索与 Agent Reach 渠道适配
+6. 写入扩展后的 `config/profile.yaml`
+7. 执行初始化验收测试
+
 ### 6.1 模式一：生成日报
 
 生成日报包括：
 
-1. 首次使用引导并生成 `config/profile.yaml`
-2. 读取用户画像和最近 7 天反馈
-3. 执行资讯采集
-4. 进行筛选、排序、分级、个性化解读
-5. 输出结构化 `payload JSON`
-6. 渲染成 HTML
-7. 启动反馈服务并打开页面
+1. 检查 `config/profile.yaml` 是否存在
+2. 若不存在，则停止当前流程并引导用户运行 `/ai-daily-init`
+3. 读取用户画像和最近 7 天反馈
+4. 执行资讯采集
+5. 进行筛选、排序、分级、个性化解读
+6. 输出结构化 `payload JSON`
+7. 渲染成 HTML
+8. 启动反馈服务并打开页面
 
 ### 6.2 模式二：评估日报
 
@@ -180,18 +195,46 @@ AI 日报技能不是单纯的新闻摘要器，而是一个：
 - 用户相关 Ground Truth
 - User Fit 维度
 
+### 7.6 初始化从主技能中拆出
+
+当前方案不再让 `/ai-daily` 在首次运行时直接展开交互式配置面板，而是改成：
+
+1. `/ai-daily` 只负责检查画像是否存在
+2. 若缺失 `config/profile.yaml`，则中止本次日报生成，并明确引导用户运行 `/ai-daily-init`
+3. `/ai-daily-init` 作为独立初始化技能，负责完成环境检查、画像推断、群聊热身和来源探索
+
+这样做的原因是：
+
+- 主技能职责更单一，聚焦“生成”和“评估”
+- 初始化流程更复杂，适合单独维护和迭代
+- 初始化失败时不会把主技能执行路径拖得过重
+- 更符合技能体系中的渐进式读取与职责拆分
+
 ---
 
 ## 8. 用户流程
+
+### 8.0 初始化主流程
+
+```mermaid
+flowchart TD
+    A["用户触发 /ai-daily-init"] --> B["检查已有 profile.yaml"]
+    B --> C["环境检查: Python3 / Agent Reach / 飞书工具"]
+    C --> D["飞书知识库读取与画像推断"]
+    D --> E["群聊绑定"]
+    E --> F["最近7天群聊历史热身"]
+    F --> G["来源探索与 Agent Reach 渠道适配"]
+    G --> H["写入 config/profile.yaml"]
+    H --> I["执行测试搜索并输出验收报告"]
+```
 
 ### 8.1 生成日报主流程
 
 ```mermaid
 flowchart TD
     A["用户触发 /ai-daily"] --> B["检查 profile.yaml"]
-    B -->|不存在| C["首次使用引导"]
+    B -->|不存在| C["停止当前流程并提示运行 /ai-daily-init"]
     B -->|存在| D["读取 profile 与最近7天反馈"]
-    C --> D
     D --> E["读取采集指南"]
     E --> F["优先使用 Agent Reach 建立 index 候选池"]
     F --> G["按需深抓 detail 正文"]
@@ -335,6 +378,36 @@ flowchart TD
 
 ## 11. 输出与交付
 
+### 11.0 初始化产物
+
+- 配置文件：`config/profile.yaml`
+- 初始化验收报告：终端/对话中的结构化摘要
+
+初始化后的 `profile.yaml` 在原有 `role / role_context / topics / daily / server` 基础上，可扩展包含：
+
+```yaml
+exclude_topics:
+  - "加密货币"
+
+feishu:
+  group_id: ""
+  tools:
+    wiki_list: ""
+    doc_read: ""
+    chat_messages: ""
+
+sources:
+  direct: []
+  search_seeds: []
+```
+
+补充说明：
+
+- `exclude_topics` 用于显式降低无关方向的召回
+- `feishu` 记录初始化阶段探测到的飞书上下文与工具映射
+- `sources.direct` 保存初始化阶段探索出的直达来源页
+- `sources.search_seeds` 保存可供采集阶段复用的种子搜索词
+
 ### 11.1 结构化中间层
 
 - 路径：`output/daily/{date}.json`
@@ -381,6 +454,7 @@ flowchart TD
 ### 13.1 关键文件
 
 - [SKILL.md](/Users/user/Documents/project/ai-daily/SKILL.md)
+- [skills/ai-daily-init.md](/Users/user/Documents/project/ai-daily/skills/ai-daily-init.md)
 - [reference/daily_collection_guide.md](/Users/user/Documents/project/ai-daily/reference/daily_collection_guide.md)
 - [reference/daily_evaluation_guide.md](/Users/user/Documents/project/ai-daily/reference/daily_evaluation_guide.md)
 - [reference/daily_example.html](/Users/user/Documents/project/ai-daily/reference/daily_example.html)
