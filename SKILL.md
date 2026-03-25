@@ -123,7 +123,7 @@ AI 根据第一步制定的编辑策略，使用搜索工具并行抓取。
 时间窗口强约束：
 
 1. 默认只允许纳入最近 3 日内的资讯
-2. 在当前会话日期为 `2026-03-24` 时，默认有效窗口应理解为：`2026-03-22` 至 `2026-03-24`
+2. 有效窗口为当天往前推 2 天，例如当前日期为 `2026-03-24` 时，窗口为 `2026-03-22` 至 `2026-03-24`
 3. 超出窗口的条目默认不得入选日报，即使它“看起来很重要”也不行
 4. 如果某条较旧内容仅用于背景说明，必须明确标注为背景，且**不能算作本期资讯条目**
 5. 生成完成前，必须再次检查所有入选条目的发布时间；只要发现超窗，必须替换
@@ -200,6 +200,12 @@ GitHub 开源信号强制要求：
    - `actions`
    - `trends`
 7. 注意不要把多个独立事件硬揉成一条抽象判断，尽量保持可验证、可追溯
+8. **日期终检（写入 JSON 前的最后一道关卡）**：
+   - 逐条检查每条入选资讯的实际发布日期
+   - `time_label` 必须填写具体日期（如 `3月22日`、`3月24日`、`今天`），禁止使用 `本周`、`持续热门`、`持续活跃` 等模糊表述
+   - 如果一条资讯的发布日期早于窗口起始日（当天 - 2 天），必须剔除并用窗口内的资讯替换
+   - 如果确实无法确认某条资讯的发布日期，必须在采集阶段就核实，核实后仍不确定的不得入选
+   - 这一步不可跳过，不可事后补做
 
 在这一阶段，**只有当开始生成结构化 payload 时**，才读取：
 
@@ -241,7 +247,11 @@ GitHub 开源信号强制要求：
 
 ### 第五步：更新导航首页
 
-更新或创建 `output/index.html`，列出所有已生成的日报。
+调用 `scripts/render_index.py` 更新或创建 `output/index.html`，列出所有已生成的日报。
+
+```bash
+python3 scripts/render_index.py
+```
 
 ### 第六步：启动反馈服务
 
@@ -311,6 +321,7 @@ GitHub 开源信号强制要求：
 | `scripts/render_daily.py` | 将 `output/daily/{date}.json` 稳定渲染为 HTML | `python3 scripts/render_daily.py output/daily/{date}.json` |
 | `scripts/open_daily.py` | 打开已生成的日报页面，优先使用本地 HTTP 服务地址 | `python3 scripts/open_daily.py {date}` |
 | `scripts/save_raw_capture.py` | 保存搜索或抓取得到的原始资讯文本，可直接抓取 URL 并追加写入 | `python3 scripts/save_raw_capture.py {date} --append ...` |
+| `scripts/render_index.py` | 扫描 `output/daily/` 生成导航首页 `output/index.html` | `python3 scripts/render_index.py` |
 | `scripts/feedback_server.py` | HTTP 静态服务 + 反馈接收，超时自动退出 | 后台运行 |
 
 注意：生成任务中，**采集、加工、筛选、摘要、行动建议由 AI 完成；HTML 结构输出优先由渲染脚本完成。** 评估任务中，AI 负责读取日报、构建 Ground Truth、完成打分和输出评估结果。

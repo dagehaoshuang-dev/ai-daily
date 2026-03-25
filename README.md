@@ -24,7 +24,8 @@
 └── scripts/
     ├── feedback_server.py
     ├── open_daily.py
-    └── render_daily.py
+    ├── render_daily.py
+    └── render_index.py
 ```
 
 ## 工作流
@@ -135,6 +136,14 @@ python3 scripts/render_daily.py output/daily/2026-03-23.json
 
 ```bash
 python3 scripts/open_daily.py 2026-03-23 --print-only --mode auto
+```
+
+### `scripts/render_index.py`
+
+生成日报导航首页 `output/index.html`，按日期倒序列出所有已生成的日报。
+
+```bash
+python3 scripts/render_index.py
 ```
 
 ### `scripts/feedback_server.py`

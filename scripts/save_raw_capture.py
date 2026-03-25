@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import html
+import os
 import re
 import sys
 from datetime import datetime
@@ -24,7 +25,35 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 
-ROOT_DIR = Path(__file__).resolve().parent.parent
+def resolve_root_dir() -> Path:
+    """优先从环境变量/工作目录推断 Skill 根目录，避免依赖固定层级。"""
+    env_root = os.environ.get("AI_DAILY_ROOT")
+    candidates: list[Path] = []
+    if env_root:
+        candidates.append(Path(env_root).expanduser())
+
+    cwd = Path.cwd().resolve()
+    candidates.extend([cwd, *cwd.parents])
+
+    script_dir = Path(__file__).resolve().parent
+    candidates.extend([script_dir, *script_dir.parents])
+
+    seen: set[Path] = set()
+    for candidate in candidates:
+        if candidate in seen:
+            continue
+        seen.add(candidate)
+        if (
+            (candidate / "SKILL.md").exists()
+            and (candidate / "reference" / "daily_example.html").exists()
+            and (candidate / "scripts" / "save_raw_capture.py").exists()
+        ):
+            return candidate
+
+    return script_dir.parent
+
+
+ROOT_DIR = resolve_root_dir()
 RAW_DIR = ROOT_DIR / "output" / "raw"
 
 

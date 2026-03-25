@@ -13,7 +13,9 @@ from __future__ import annotations
 import argparse
 import base64
 import json
-from datetime import datetime
+import re
+import sys
+from datetime import datetime, timedelta
 from html import escape
 from pathlib import Path
 from typing import Any
@@ -804,6 +806,53 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def check_time_window(payload: dict[str, Any], window_days: int = 3) -> list[str]:
+    """检查文章的 time_label 是否在时间窗口内，返回警告列表。"""
+    warnings: list[str] = []
+    meta_date = payload.get("meta", {}).get("date", "")
+    try:
+        report_date = datetime.strptime(meta_date, "%Y-%m-%d")
+    except ValueError:
+        return warnings
+    window_start = report_date - timedelta(days=window_days - 1)
+
+    # 模糊 time_label 检测
+    vague_patterns = {"本周", "持续热门", "持续活跃", "近期", "最近", "近日"}
+
+    for article in payload.get("articles", []):
+        title = article.get("title", "")
+        time_label = article.get("time_label", "")
+        article_id = article.get("id", "?")
+
+        # 检查模糊表述
+        for vague in vague_patterns:
+            if vague in time_label:
+                warnings.append(
+                    f"  [{article_id}] time_label 使用了模糊表述 \"{time_label}\"，"
+                    f"应改为具体日期 — {title}"
+                )
+                break
+
+        # 尝试从 time_label 提取日期并校验窗口
+        m = re.search(r"(\d{1,2})月(\d{1,2})日", time_label)
+        if m:
+            month, day = int(m.group(1)), int(m.group(2))
+            try:
+                article_date = report_date.replace(month=month, day=day)
+                if article_date > report_date:
+                    article_date = article_date.replace(year=article_date.year - 1)
+                if article_date < window_start:
+                    warnings.append(
+                        f"  [{article_id}] 发布日期 {month}月{day}日 超出 {window_days} 日窗口"
+                        f"（{window_start.strftime('%m-%d')} ~ {report_date.strftime('%m-%d')}）"
+                        f" — {title}"
+                    )
+            except ValueError:
+                pass
+
+    return warnings
+
+
 def main() -> None:
     args = parse_args()
     input_path = Path(args.input)
@@ -814,6 +863,18 @@ def main() -> None:
         raise SystemExit(f"ERROR: payload JSON 解析失败: {exc}") from exc
     except ValueError as exc:
         raise SystemExit(f"ERROR: payload 契约校验失败: {exc}") from exc
+
+    # 时间窗口检查
+    time_warnings = check_time_window(payload)
+    if time_warnings:
+        print("⚠️  时间窗口警告：以下条目可能超出 3 日窗口或使用了模糊日期", file=sys.stderr)
+        for w in time_warnings:
+            print(w, file=sys.stderr)
+        print(
+            "   建议：检查 time_label 并替换超窗条目后重新渲染",
+            file=sys.stderr,
+        )
+
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(render_html(payload), encoding="utf-8")
     print(f"Rendered {output_path}")

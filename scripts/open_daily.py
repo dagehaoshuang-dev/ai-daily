@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import socket
 import subprocess
 import sys
 from pathlib import Path
@@ -63,8 +64,16 @@ def read_server_port() -> int | None:
     if not PORT_FILE.exists():
         return None
     try:
-        return int(PORT_FILE.read_text(encoding="utf-8").strip())
+        port = int(PORT_FILE.read_text(encoding="utf-8").strip())
     except ValueError:
+        return None
+    # 检查端口是否真的在监听，避免残留端口文件误导
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.settimeout(1)
+            s.connect(("localhost", port))
+        return port
+    except OSError:
         return None
 
 
