@@ -52,12 +52,13 @@ metadata:
 | 列出知识库页面 | `feishu_wiki_space_node`, `feishu_wiki`, `lark_wiki_list` 等 | KB 初始化 |
 | 读取文档内容 | `feishu_fetch_doc`, `feishu_doc`, `lark_doc_read` 等 | KB 初始化 |
 | 读取群聊消息 | `feishu_im_user_get_messages`, `feishu_chat`, `lark_chat_messages` 等 | 群聊信号 |
-| 写入/追加文档内容 | `feishu_doc_write`, `feishu_append_block`, `lark_doc_append` 等 | 群聊总结回写飞书 |
+| 创建新文档 | `feishu_doc_create`, `create-doc`, `lark_doc_create` | 在知识库指定节点下创建子页面（用于群聊总结回写） |
+| 写入/追加文档内容 | `feishu_doc_write`, `feishu_append_block`, `lark_doc_append` 等 | 兜底：若无法创建子页则追加到已有文档 |
 
 3. 如果某个逻辑能力找不到对应工具：
    - KB 相关工具缺失 → 跳过 KB 初始化，提示用户手动创建 `config/dept-profile.yaml`
    - 群聊工具缺失 → 永久跳过第一步（等同于 `degraded`），仅依赖搜索和反馈数据
-   - 文档写入工具缺失 → 跳过 1-E（群聊总结回写飞书），在输出中提示用户，不影响日报生成
+   - 文档工具缺失 → 跳过 1-E（群聊总结回写飞书），在输出中提示用户，不影响日报生成
 4. 将发现的工具名记录到 `config/dept-profile.yaml` 的 `runtime` 字段中，后续运行直接使用，无需每次重新发现
 
 ```yaml
@@ -66,7 +67,8 @@ runtime:
     wiki_list: "feishu_wiki"        # 实际发现的工具名
     doc_read: "feishu_doc"
     chat_messages: "feishu_chat"
-    doc_write: "feishu_doc_write"   # 写入/追加文档内容（用于群聊总结回写）
+    doc_create: "feishu_doc_create" # 创建新文档（用于在工作日报下建子页）
+    doc_write: "feishu_doc_write"   # 兜底：写入/追加文档内容
   last_signal_update: null
   last_digest_run: null
   last_step1_result: null
@@ -326,40 +328,43 @@ runtime:
 
 ---
 
-#### 1-E 群聊总结回写飞书（可选）
+#### 1-E 群聊总结回写飞书（必选，若工具可用）
 
-完成 1-D 画像演进后，将今日群聊总结以**人类可读格式**追加写入飞书知识库的"群聊总结回顾"页面，供团队日后查阅。
+完成 1-D 画像演进后，将今日群聊总结作为**独立新子页面**创建在飞书知识库的“工作日报”节点下。
 
-**目标页面**：`department.chat_summary_wiki_url` 中配置的飞书 Wiki 页面。
+**⚠️ 核心要求**：必须在指定父节点下**创建新的子文档**，而不是追加到父文档。每个工作日产生一个独立文档。
+
+**目标父节点**：`department.chat_summary_wiki_url` 中配置的飞书 Wiki 节点。
 
 **前置检查**：
-1. 读取 `runtime.feishu_tools.doc_write`
-2. 若字段为空或缺失 → **不要直接跳过**，立即扫描当前可用 MCP 工具列表，查找同时包含飞书/lark 关键词且含 `write`、`append`、`block`、`create` 关键词的工具，取第一个匹配项
-3. 发现工具 → 将工具名写入 `runtime.feishu_tools.doc_write`（更新 `dept-profile.yaml`），继续执行写入
-4. 扫描后仍找不到 → 跳过，输出提示 `⚠️ [1-E] 未完成 — 未找到文档写入工具 — 建议确认飞书 MCP 插件已开启 docx:document:write 权限`
+1. 读取 `runtime.feishu_tools.doc_create`
+2. 若字段为空或缺失 → 立即扫描当前可用 MCP 工具列表，查找包含飞书/lark 关键词且含 `create-doc` 或 `create_doc` 的工具
+3. 发现工具 → 将工具名写入 `runtime.feishu_tools.doc_create`（更新 `dept-profile.yaml`），继续执行创建
+4. 扫描后仍找不到 → 尝试使用 `runtime.feishu_tools.doc_write` 并在父文档末尾追加，但必须在输出中告知用户：“⚠️ 未能创建子页面，已回退为追加模式。建议安装具备文档创建权限的插件。”
 
-**追加内容格式**（Markdown，追加到页面末尾）：
+**创建参数**：
+- **标题**：`AI Lab群每日总结 | {date}`
+- **wiki_node**：`department.chat_summary_wiki_url`（URL 或 Token）。通过该参数将新文档挂载为“工作日报”的子节点。
+- **内容格式**（Markdown）：
 
 ```markdown
-## {date} 群聊总结
-
-**一句话概述**：{user-profile.summary}
+一句话概述：{user-profile.summary}
 
 ### 💼 今日协同
-- **决议**：{decisions 列表，无则省略此项}
-- **阻碍**：{blockers 列表，无则省略此项}
-- **待办**：{action_items 列表，无则省略此项}
+- **决议**：{decisions 列表}
+- **阻碍**：{blockers 列表}
+- **待办**：{action_items 列表}
 
 ### 🔗 分享资源
-{resources 列表：名称 + 链接 + 群友评价，无则省略整节}
+{resources 列表：名称 + 链接 + 群友评价}
 
 ### 🎯 今日关注焦点
 {hot_topics 列表：话题名 + 一句话摘要 + 立场描述}
 ```
 
 **写入规则**：
-- 追加到页面末尾，不修改已有内容
-- 同一天重复运行时，先检查页面是否已有当日标题（`## {date} 群聊总结`），有则跳过，不重复写入
+- 每次运行创建一个独立的新页面，不修改已有内容
+- 页面标题包含日期，确保在 Wiki 目录树中清晰排列
 - 内容保持简洁，不写原始消息，不出现具体人名
 
 ---
