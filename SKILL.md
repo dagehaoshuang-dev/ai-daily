@@ -347,6 +347,62 @@ python3 scripts/render_index.py
 3. 等待 `data/.server_port` 写入，读取端口号
 4. 当前机器使用 `python3 scripts/open_daily.py {date} --mode http` 打开页面；局域网其他用户使用启动日志中打印出的 `http://<局域网IP>:<port>/daily/{date}.html`
 
+### 第八点五步：来源信号追踪与健康检查
+
+在输出结果前，依次执行以下两个脚本（任一失败不阻断后续流程，记录错误后继续）：
+
+```bash
+python3 scripts/track_source_signals.py --date {date}
+python3 scripts/check_source_health.py
+```
+
+**第一个脚本**：解析 `output/raw/{date}_index.txt`，统计本次采集中各 `sources.direct` URL 的命中条数，以及首次出现的新来源域名，写入 `data/source_signals/{date}.json`。
+
+**第二个脚本**：扫描最近 14 天的信号历史，应用阈值规则：
+- 某 direct URL 连续 7 个有效采集日命中为 0 → 标记为 `stale`，建议移除
+- 非 direct 的新来源连续 3 个有效采集日均有命中 → 标记为 `emerging`，建议新增
+
+若触发了阈值，脚本自动生成 `data/source_review_pending.json`（`reviewed: false`）。
+
+若 `data/source_review_pending.json` 已存在且 `reviewed: false`，脚本会跳过（不覆盖未完成的审查）。
+
+#### 来源审查流程（当 pending 文件存在时）
+
+若检测到 `data/source_review_pending.json` 存在且 `reviewed: false`，在输出日报结果之前执行来源审查：
+
+1. **读取 pending 文件**，获取待审查的变更列表
+
+2. **模型对每条变更补充判断**（这是模型判断点，不是脚本）：
+   - 对 `stale` 条目：结合用户 profile 判断该来源是否真的过时，还是话题近期本就冷清；如判断为过时，搜索 1-2 个同类高质量替代来源并评估其相关性，填入 `replacement_url`
+   - 对 `emerging` 条目：抓取该来源的页面，评估内容质量和与用户画像的匹配度，确认值得新增时填入建议使用的完整 `add_url`
+
+3. **向用户展示变更建议**，格式示例：
+
+```
+📡 来源更新建议（基于最近 N 天信号）
+
+① [建议移除] https://fintech.xinhua08.com/
+   原因：连续 7 天命中为 0
+   模型判断：该站近期内容以政策解读为主，与你关注的产品/API 方向偏离
+   建议替换：https://www.wdzj.com/（近 3 次采集发现 4 条相关条目）
+
+② [建议新增] https://payments.journal.com
+   原因：连续 4 次采集共命中 6 条
+   模型判断：内容聚焦跨境支付和开放银行，与你的 high 话题高度匹配
+
+回复"全部确认" / "跳过" / 或输入序号（如"确认①，跳过②"）
+```
+
+4. **等待用户回复**，将用户决策写入 pending 文件对应 change 的 `confirmed` 字段（`true`/`false`）
+
+5. **用户确认后调用**：
+   ```bash
+   python3 scripts/apply_source_changes.py
+   ```
+   脚本将 confirmed 变更写入 `config/profile.yaml`，并将 pending 文件标记为 `reviewed: true`
+
+6. 告知用户：`profile.yaml` 已更新，下次运行 `/daily` 即生效
+
 ### 第九步：输出结果
 
 告知用户：
@@ -411,6 +467,9 @@ python3 scripts/render_index.py
 | `scripts/build_queries.py` | 根据 profile.yaml 自动生成带日期过滤的搜索查询列表 | `python3 scripts/build_queries.py --date {date} --window 3` |
 | `scripts/render_index.py` | 扫描 `output/daily/` 生成导航首页 `output/index.html` | `python3 scripts/render_index.py` |
 | `scripts/feedback_server.py` | HTTP 静态服务 + 反馈接收，超时自动退出 | 后台运行 |
+| `scripts/track_source_signals.py` | 记录本次采集的来源命中信号，写入 `data/source_signals/{date}.json` | `python3 scripts/track_source_signals.py --date {date}` |
+| `scripts/check_source_health.py` | 扫描信号历史，触发阈值时生成 `data/source_review_pending.json` | `python3 scripts/check_source_health.py` |
+| `scripts/apply_source_changes.py` | 将用户确认的来源变更写入 `profile.yaml`，标记审查完成 | `python3 scripts/apply_source_changes.py` |
 
 注意：生成任务中，**采集、加工、筛选、摘要、行动建议由 AI 完成；HTML 结构输出优先由渲染脚本完成。** 评估任务中，AI 负责读取日报、构建 Ground Truth、完成打分和输出评估结果。
 
@@ -429,6 +488,10 @@ python3 scripts/render_index.py
 | 日报质量评估 | AI | 需要构建 Ground Truth、做覆盖匹配并输出定性定量判断 |
 | 兴趣漂移检测 | AI | 需要对比 profile 和行为数据的差异 |
 | 反馈数据收集 | 脚本（HTTP 服务）| 纯网络 IO，无需 AI 介入 |
+| 来源命中信号记录 | 脚本（`track_source_signals.py`） | 纯 IO 统计，无需判断 |
+| 来源健康阈值判断 | 脚本（`check_source_health.py`） | 规则明确，硬编码即可 |
+| 来源质量与替代来源评估 | AI | 需要理解用户画像和来源内容质量 |
+| 来源变更写入 | 脚本（`apply_source_changes.py`） | 用户确认后的纯写入操作 |
 
 执行时只需记住：
 
