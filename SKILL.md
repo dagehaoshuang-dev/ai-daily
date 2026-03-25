@@ -52,10 +52,12 @@ metadata:
 | 列出知识库页面 | `feishu_wiki_space_node`, `feishu_wiki`, `lark_wiki_list` 等 | KB 初始化 |
 | 读取文档内容 | `feishu_fetch_doc`, `feishu_doc`, `lark_doc_read` 等 | KB 初始化 |
 | 读取群聊消息 | `feishu_im_user_get_messages`, `feishu_chat`, `lark_chat_messages` 等 | 群聊信号 |
+| 写入/追加文档内容 | `feishu_doc_write`, `feishu_append_block`, `lark_doc_append` 等 | 群聊总结回写飞书 |
 
 3. 如果某个逻辑能力找不到对应工具：
    - KB 相关工具缺失 → 跳过 KB 初始化，提示用户手动创建 `config/dept-profile.yaml`
    - 群聊工具缺失 → 永久跳过第一步（等同于 `degraded`），仅依赖搜索和反馈数据
+   - 文档写入工具缺失 → 跳过 1-E（群聊总结回写飞书），在输出中提示用户，不影响日报生成
 4. 将发现的工具名记录到 `config/dept-profile.yaml` 的 `runtime` 字段中，后续运行直接使用，无需每次重新发现
 
 ```yaml
@@ -64,6 +66,7 @@ runtime:
     wiki_list: "feishu_wiki"        # 实际发现的工具名
     doc_read: "feishu_doc"
     chat_messages: "feishu_chat"
+    doc_write: "feishu_doc_write"   # 写入/追加文档内容（用于群聊总结回写）
   last_signal_update: null
   last_digest_run: null
   last_step1_result: null
@@ -80,6 +83,7 @@ runtime:
 | 获取群聊消息 | `im:message:readonly` 或 `im:message.group_msg:readonly` | 第一步：群聊信号 | 无法读取群聊，画像不会自动更新（degraded 模式） |
 | 获取群聊信息 | `im:chat:readonly` | 第一步：验证群聊 ID | 无法验证群聊是否存在 |
 | 获取用户信息（可选） | `contact:user.base:readonly` | 群聊消息中识别发言人 | 不影响核心功能，仅影响信号归因精度 |
+| 编辑文档内容 | `docx:document:write` 或 `docs:doc:write` | 第一步 1-E：群聊总结回写飞书 | 跳过总结回写，不影响日报生成 |
 
 **注意**：不同飞书 MCP 插件对权限的封装方式不同。有些插件在安装时已内置了必要权限，有些需要用户在飞书开放平台手动配置。如果工具发现成功但调用时返回权限错误，通常是以上权限未开启。
 
@@ -318,6 +322,42 @@ runtime:
   blockers: ["多文件串流卡顿", "MCP 权限配置复杂"]
   group_signals: "群聊聚焦于 Agent 落地能力，重点讨论了定时任务和插件生态。"
 ```
+
+---
+
+#### 1-E 群聊总结回写飞书（可选）
+
+完成 1-D 画像演进后，将今日群聊总结以**人类可读格式**追加写入飞书知识库的"群聊总结回顾"页面，供团队日后查阅。
+
+**目标页面**：`department.chat_summary_wiki_url` 中配置的飞书 Wiki 页面。
+
+**前置检查**：
+- `runtime.feishu_tools.doc_write` 存在 → 执行写入
+- 工具不存在 → 跳过，输出提示 `⚠️ [1-E] 未完成 — 未找到文档写入工具 — 建议检查飞书 MCP 插件权限`
+
+**追加内容格式**（Markdown，追加到页面末尾）：
+
+```markdown
+## {date} 群聊总结
+
+**一句话概述**：{user-profile.summary}
+
+### 💼 今日协同
+- **决议**：{decisions 列表，无则省略此项}
+- **阻碍**：{blockers 列表，无则省略此项}
+- **待办**：{action_items 列表，无则省略此项}
+
+### 🔗 分享资源
+{resources 列表：名称 + 链接 + 群友评价，无则省略整节}
+
+### 🎯 今日关注焦点
+{hot_topics 列表：话题名 + 一句话摘要 + 立场描述}
+```
+
+**写入规则**：
+- 追加到页面末尾，不修改已有内容
+- 同一天重复运行时，先检查页面是否已有当日标题（`## {date} 群聊总结`），有则跳过，不重复写入
+- 内容保持简洁，不写原始消息，不出现具体人名
 
 ---
 

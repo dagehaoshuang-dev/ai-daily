@@ -17,6 +17,7 @@ department:
   freeform_context: ""       # Free text for AI context
   industry: ""               # Industry/business model label (separate from domain)
   feishu_group_id: ""        # Set via /ai-daily set-group <chat_id>
+  chat_summary_wiki_url: "" # Feishu Wiki URL to append daily chat summaries (Step 1-E)
 
 # KB init configuration (defaults; override here to adjust)
 kb_init:
@@ -105,6 +106,7 @@ runtime:
     wiki_list: null         # Discovered tool name for listing KB pages
     doc_read: null          # Discovered tool name for reading doc content
     chat_messages: null     # Discovered tool name for reading group messages
+    doc_write: null         # Discovered tool name for writing/appending doc content (Step 1-E)
   last_signal_update: null
   last_digest_run: null
   last_step1_result: null   # full_success | partial_fetch | business_empty | transport_auth_failure
