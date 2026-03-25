@@ -3,7 +3,7 @@
 # Use this as a starting point for department-driven AI digest configuration
 # Fill in values according to your department's specific needs
 
-schema_version: 1
+schema_version: 2
 status: uninitialized   # uninitialized | awaiting_group_id | active | degraded
 
 # Static section (generated at init, rarely changes)
@@ -17,6 +17,8 @@ department:
   freeform_context: ""       # Free text for AI context
   industry: ""               # Industry/business model label (separate from domain)
   feishu_group_id: ""        # Set via /ai-daily set-group <chat_id>
+  chat_summary_wiki_node: "" # Feishu Wiki Node Token to create daily summary docs under (Step 1-E)
+                              # Extract from your Wiki URL: feishu.cn/wiki/{token}
 
 # KB init configuration (defaults; override here to adjust)
 kb_init:
@@ -35,9 +37,24 @@ tracking:
   technologies: []
   people: []
 
-# Topic weights (auto-adjusted daily; all parameters from signal_rules)
+# Topic weights (auto-adjusted daily based on group chat signals)
+# New topics are NOT added directly here. They appear in daily user-profile.json first,
+# and are promoted here only after appearing on staging_confirm_days consecutive days.
 topic_weights: []
-# Each entry: {topic, weight, last_signal}
+# Each entry:
+#   topic: ""               # Topic name (specific product/tech/project, not generic terms)
+#   weight: 0.5             # Current weight [0.1, 1.0]
+#   last_signal: ""         # Date of last group chat signal (YYYY-MM-DD)
+#   first_seen: ""          # Date topic first appeared in group chat (YYYY-MM-DD)
+#   signal_count: 0         # Cumulative number of days with signal
+#   signal_type: sustained  # burst | sustained | task
+#                           #   burst:    single-day spike, decays fast (burst_decay)
+#                           #   sustained: appeared on staging_confirm_days+ consecutive days
+#                           #   task:     mentioned in blockers/action_items (highest boost)
+#   preferred_angles: []    # Search angle preferences inferred from group discussion
+#                           #   e.g. ["工程落地", "与现有工具对比"]
+#   avoid_angles: []        # Search angles to exclude
+#                           #   e.g. ["纯理论原理", "入门教程"]
 
 # Recommended sources (AI-inferred from domain during init; manually overridable)
 sources:
@@ -46,15 +63,24 @@ sources:
 
 # Signal processing parameters (all values are defaults; override here to tune)
 signal_rules:
-  # --- Signal extraction ---
-  topic_boost_threshold: 2
-  new_topic_threshold: 3
+  # --- Signal extraction thresholds ---
+  topic_boost_threshold: 2        # Min keyword hits to trigger weight boost
+  new_topic_threshold: 3          # Min mentions to add topic to daily user-profile
   entity_threshold: 2
   # --- Weight dynamics ---
-  daily_boost: 0.2
-  daily_decay: 0.9
-  weight_floor: 0.1
-  new_topic_initial_weight: 0.4
+  daily_boost: 0.2                # Weight increment when signal present
+  daily_decay: 0.9                # Weight decay multiplier when no signal
+  weight_floor: 0.1               # Minimum weight before pruning
+  new_topic_initial_weight: 0.4   # Weight assigned when promoted from daily to long-term
+  # --- Staging / promotion ---
+  staging_confirm_days: 2         # Days topic must appear consecutively to enter topic_weights
+  staging_max_days: 7             # Days a topic can stay in daily files before being dropped
+  # --- Signal type thresholds ---
+  burst_threshold: 5              # Min daily mentions to classify as burst
+  sustained_min_days: 3           # Min consecutive days to classify as sustained
+  burst_boost_multiplier: 1.5     # Boost multiplier for burst signals
+  burst_decay: 0.7                # Faster decay for burst-type topics
+  task_boost_multiplier: 2.0      # Boost multiplier for task-type signals (blockers/action items)
   # --- Pruning ---
   prune_days: 30
   prune_score_threshold: 0.3
@@ -69,10 +95,19 @@ signal_rules:
 
 # Rolling 7-day history (calendar days; last-write-wins if run twice same day)
 history: []
-# Each entry: {date, top_topics, group_signals}
+# Each entry:
+#   date: "YYYY-MM-DD"
+#   top_topics: []          # Top topic names that day
+#   blockers: []            # Blocker descriptions from group chat
+#   group_signals: ""       # One-line summary of group chat focus
 
 # Runtime metadata (auto-updated each run; do not edit manually)
 runtime:
+  feishu_tools:
+    wiki_list: null         # Discovered tool name for listing KB pages
+    doc_read: null          # Discovered tool name for reading doc content
+    chat_messages: null     # Discovered tool name for reading group messages
+    doc_write: null         # Discovered tool name for writing/appending doc content (Step 1-E)
   last_signal_update: null
   last_digest_run: null
-  last_step1_result: null    # full_success | partial_fetch | business_empty | transport_auth_failure
+  last_step1_result: null   # full_success | partial_fetch | business_empty | transport_auth_failure
