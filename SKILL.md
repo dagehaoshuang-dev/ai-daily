@@ -334,41 +334,51 @@ runtime:
 
 **目标父节点**：`department.chat_summary_wiki_node`（Wiki Node Token，从 `config/dept-profile.yaml` 读取）。
 
-**前置检查**：
-1. 读取 `runtime.feishu_tools.doc_create`
-2. 若字段为空或缺失 → 立即扫描当前可用 MCP 工具列表，查找包含飞书/lark 关键词且含 `create_doc` 或 `create-doc` 的工具
-3. 发现工具 → 写入 `runtime.feishu_tools.doc_create`，继续执行
+**前置检查**（按序执行，任一失败则跳过 1-E）：
+1. 读取 `department.chat_summary_wiki_node`；若为空 → 跳过，输出 `⚠️ [1-E] 跳过 — dept-profile.yaml 中 chat_summary_wiki_node 未配置`
+2. 读取 `runtime.feishu_tools.doc_write`；若字段为空或缺失 → 立即扫描当前可用 MCP 工具列表，查找包含飞书/lark 关键词且含 `create_doc`、`create-doc` 或 `doc_write` 的工具
+3. 发现工具 → 写入 `runtime.feishu_tools.doc_write`（同步更新 `config/dept-profile.yaml`），继续执行
 4. 扫描后仍找不到 → 跳过，输出 `⚠️ [1-E] 未完成 — 未找到文档创建工具 — 建议确认飞书 MCP 插件已开启 docx:document:write 权限`
 
-**文档标题**：`【AI Lab 每日洞察】{YYYY-MM-DD}`
+**部门名称**：从 `department.name` 读取，用于文档标题和页眉，禁止硬编码。
 
-**文档内容格式**（严格按以下 Markdown 结构生成，不要随意增减节）：
+**文档标题**：`【{department.name} 每日洞察】{YYYY-MM-DD}`
+
+**安静日处理**：若 `message_stats.after_cleaning == 0`（当天无有效消息），创建简化页面：
+- 标题：`【{department.name} 每日洞察】{YYYY-MM-DD}（安静日）`
+- 内容仅写：`> 📭 今日群内无有效消息，日报基于画像历史与搜索结果生成。`
+- 跳过三维内容节，不输出空节占位
+
+**文档内容格式**（正常日，严格按以下 Markdown 结构生成，不要随意增减节）：
 
 ```markdown
-# 📅 AI Lab 每日洞察 ({当天日期})
+# 📅 {department.name} 每日洞察 ({YYYY-MM-DD})
+
+> 消息处理：共获取 {total_fetched} 条，清洗后有效 {after_cleaning} 条
 
 ## 🎯 核心焦点 (1分钟速读)
-{一句话总结今天群内讨论最热烈的 1-2 个方向，直接写结论，不写废话}
+{直接写结论：今天群内讨论最热烈的 1-2 个方向。来源：chat-summary.json 的顶层 summary 字段}
 
 ## 💼 项目协同与讨论
-{今日决议、阻碍、待办。无内容则写”今日无明确协同事项”，不省略此节}
-- **决议**：{decisions，无则省略此行}
-- **阻碍**：{blockers，无则省略此行}
-- **待办**：{action_items，无则省略此行}
+{来源：project_execution 维度。无内容则写”今日无明确协同事项”，不省略此节}
+- **决议**：{decisions[].content，无则省略此行}
+- **阻碍**：{blockers[].content（附 related_topic 若有），无则省略此行}
+- **待办**：{action_items[].task（附 assignee/deadline 若有），无则省略此行}
 
 ## 🔗 优质信息源
-{群内分享的链接、工具、论文。格式如下，无资源则写”今日无资源分享”}
-- **[资源名称](URL)** — 群友评价：{评价原文，无评价则留空}
+{来源：information_resources.resources[]，仅展示 evaluation=good 或 mentioned_by>=2 的资源。无则写”今日无资源分享”}
+- **[{name}]({url})** — {comment}（{mentioned_by} 人提及）
 
 ## 💡 深度观点碰撞
-{对新模型、新产品、行业趋势的深度分析与观点。无则写”今日无深度讨论”}
-- {观点描述，保留立场和态度，去掉口水话}
+{来源：insights_interests.hot_topics[]。每条对应一个 hot_topic，展示立场和态度，去掉口水话。无则写”今日无深度讨论”}
+- **{topic}**（{stance}）：{stance_note 或 summary，二选其一，优先 stance_note}
 ```
 
 **写入规则**：
 - 每次运行创建一个独立新页面，不修改已有页面
 - 内容不出现具体人名，用”有同学提到”代替
-- 完成后输出生成的 Wiki 文档 URL，方便用户直接跳转查看
+- `## 🔗 优质信息源` 中无 URL 的资源（type=other 且 url 为空）跳过不展示
+- 完成后输出生成的 Wiki 文档 URL，方便用户直接跳转查看；若创建调用返回错误，输出错误信息并标记为失败（不影响后续步骤）
 
 ---
 
