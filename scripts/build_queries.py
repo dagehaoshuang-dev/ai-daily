@@ -159,41 +159,34 @@ def generate_queries(
         if not name:
             continue
 
-        # Determine query count by priority
-        if priority == "high":
-            max_queries = 3
-        elif priority == "medium":
-            max_queries = 2
-        else:
-            max_queries = 1
-
-        generated = 0
-
-        # Query 1: topic name + date range (Chinese)
+        # 1) topic name + date range (Chinese)
         queries.append((priority, name, f"{name} {start_cn}-{end_cn}"))
-        generated += 1
 
-        # Query 2: first 2-3 keywords combined + date (Chinese)
-        if generated < max_queries and len(keywords) >= 2:
+        # 2) keywords combined + date (Chinese)
+        if len(keywords) >= 2:
             kw_combo = " ".join(keywords[:3])
             queries.append((priority, name, f"{kw_combo} 最新 {start_cn}"))
-            generated += 1
 
-        # Query 3: English keywords + after: date filter
-        if generated < max_queries and keywords:
-            en_kws = [k for k in keywords if any(c.isascii() and c.isalpha() for c in k)]
-            if en_kws:
-                en_combo = " ".join(en_kws[:3])
-                queries.append(
-                    (priority, name, f"{en_combo} news after:{start_iso}")
-                )
-                generated += 1
-
-        # If still short, use topic name in English-style search
-        if generated < max_queries:
+        # 3) English keywords + after: date filter
+        en_kws = [k for k in keywords if any(c.isascii() and c.isalpha() for c in k)]
+        if en_kws:
+            en_combo = " ".join(en_kws[:3])
             queries.append(
-                (priority, name, f"{name} latest news {end_iso}")
+                (priority, name, f"{en_combo} news after:{start_iso}")
             )
+
+        # 4) 每个 keyword 独立搜索（high 全部，medium 前 2 个，low 前 1 个）
+        kw_limit = {"high": len(keywords), "medium": 2, "low": 1}.get(priority, 1)
+        for kw in keywords[:kw_limit]:
+            queries.append((priority, name, f"{kw} {start_cn}-{end_cn}"))
+
+        # 5) 交叉组合：topic name + 每个关键词（仅 high）
+        if priority == "high":
+            for kw in keywords[:3]:
+                if kw != name:
+                    queries.append(
+                        (priority, name, f"{name} {kw} after:{start_iso}")
+                    )
 
     # Search seeds from profile
     sources = profile.get("sources", {})
@@ -212,7 +205,27 @@ def generate_queries(
     for url in direct:
         queries.append(("direct", "直抓来源", f"FETCH {url}"))
 
-    return queries
+    # 综合聚合查询：覆盖行业级资讯入口
+    role = profile.get("role", "")
+    role_ctx = profile.get("role_context", "")
+    if role or role_ctx:
+        role_label = role or "行业"
+        queries.append(("extra", "综合", f"{role_label} 行业动态 {start_cn}-{end_cn}"))
+        queries.append(("extra", "综合", f"{role_label} 新闻 最新发布 {end_cn}"))
+
+    # 高频行业聚合搜索
+    high_names = [t["name"] for t in topics_sorted if t.get("priority") == "high"]
+    if len(high_names) >= 2:
+        queries.append(("extra", "综合", f"{' '.join(high_names[:3])} 最新动态 {start_cn}"))
+
+    # 去重（保持顺序，按 query 文本去重）
+    seen_queries: set[str] = set()
+    deduped: list[tuple[str, str, str]] = []
+    for p, t, q in queries:
+        if q not in seen_queries:
+            seen_queries.add(q)
+            deduped.append((p, t, q))
+    return deduped
 
 
 def main() -> None:
