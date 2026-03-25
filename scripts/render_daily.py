@@ -143,11 +143,13 @@ def normalize_meta(meta: Any) -> dict[str, Any]:
     date = meta.get("date")
     if not isinstance(date, str) or not date.strip():
         raise ValueError("payload.meta.date 缺失或不是有效字符串")
+    # 用实际渲染时间覆盖，确保页面显示的时间准确
+    now = datetime.now()
     return {
         "date": date.strip(),
         "date_label": meta.get("date_label", ""),
-        "generated_at": meta.get("generated_at", ""),
-        "generated_time": meta.get("generated_time", ""),
+        "generated_at": now.strftime("%Y-%m-%d %H:%M"),
+        "generated_time": now.strftime("%H:%M"),
         "role": meta.get("role", ""),
     }
 
