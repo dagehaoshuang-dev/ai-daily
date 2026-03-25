@@ -102,7 +102,7 @@ runtime:
 | set-group | 用户不知道 chat_id 怎么获取 | 飞书群聊 ID 不直观 | 在飞书群设置中查看群链接，提取 ID；或让管理员提供 |
 | 第一步 | 群聊消息读取返回 403 | `im:message:readonly` 权限未开启 | 在飞书开放平台开启消息读取权限 |
 | 第一步 | 群聊消息读取返回空 | 群聊 ID 错误，或当天无消息 | 检查 `feishu_group_id` 是否正确；当天无消息属正常（业务为空） |
-| 第一步 1-E | 群聊总结未写入飞书 | `runtime.feishu_tools.doc_write` 为空且实时发现失败 | 确认飞书 MCP 插件已开启 `docx:document:write` 权限；可手动在 `dept-profile.yaml` 的 `runtime.feishu_tools` 下添加 `doc_write: "实际工具名"` |
+| 第一步 1-E | 群聊总结未写入飞书 | `runtime.feishu_tools.doc_create` 为空且实时发现失败 | 确认飞书 MCP 插件已开启 `docx:document:write` 权限；可手动在 `dept-profile.yaml` 的 `runtime.feishu_tools` 下添加 `doc_create: "实际工具名"` |
 | 第二步 | 搜索结果为空或极少 | WebSearch 工具不可用，或网络问题 | 检查搜索工具是否可用，检查网络连接 |
 | 第四步 | render_daily.py 报错 | JSON payload 格式不正确 | 检查 `output/daily/{date}.json` 是否符合契约 |
 | 第六步 | 端口绑定失败 | 端口被占用或沙箱限制 | 等待旧服务超时退出，或检查系统权限 |
@@ -330,42 +330,45 @@ runtime:
 
 #### 1-E 群聊总结回写飞书（必选，若工具可用）
 
-完成 1-D 画像演进后，将今日群聊总结作为**独立新子页面**创建在飞书知识库的“工作日报”节点下。
+完成 1-D 画像演进后，将今日群聊总结作为**独立新子页面**创建在飞书知识库的指定节点下，供团队成员人工查阅。
 
-**⚠️ 核心要求**：必须在指定父节点下**创建新的子文档**，而不是追加到父文档。每个工作日产生一个独立文档。
-
-**目标父节点**：`department.chat_summary_wiki_url` 中配置的飞书 Wiki 节点。
+**目标父节点**：`department.chat_summary_wiki_node`（Wiki Node Token，如 `ThhTwhgRRiQmi7kPRGycnkaTnoe`）。
 
 **前置检查**：
 1. 读取 `runtime.feishu_tools.doc_create`
-2. 若字段为空或缺失 → 立即扫描当前可用 MCP 工具列表，查找包含飞书/lark 关键词且含 `create-doc` 或 `create_doc` 的工具
-3. 发现工具 → 将工具名写入 `runtime.feishu_tools.doc_create`（更新 `dept-profile.yaml`），继续执行创建
-4. 扫描后仍找不到 → 尝试使用 `runtime.feishu_tools.doc_write` 并在父文档末尾追加，但必须在输出中告知用户：“⚠️ 未能创建子页面，已回退为追加模式。建议安装具备文档创建权限的插件。”
+2. 若字段为空或缺失 → 立即扫描当前可用 MCP 工具列表，查找包含飞书/lark 关键词且含 `create_doc` 或 `create-doc` 的工具
+3. 发现工具 → 写入 `runtime.feishu_tools.doc_create`，继续执行
+4. 扫描后仍找不到 → 跳过，输出 `⚠️ [1-E] 未完成 — 未找到文档创建工具 — 建议确认飞书 MCP 插件已开启 docx:document:write 权限`
 
-**创建参数**：
-- **标题**：`AI Lab群每日总结 | {date}`
-- **wiki_node**：`department.chat_summary_wiki_url`（URL 或 Token）。通过该参数将新文档挂载为“工作日报”的子节点。
-- **内容格式**（Markdown）：
+**文档标题**：`【AI Lab 每日洞察】{YYYY-MM-DD}`
+
+**文档内容格式**（严格按以下 Markdown 结构生成，不要随意增减节）：
 
 ```markdown
-一句话概述：{user-profile.summary}
+# 📅 AI Lab 每日洞察 ({当天日期})
 
-### 💼 今日协同
-- **决议**：{decisions 列表}
-- **阻碍**：{blockers 列表}
-- **待办**：{action_items 列表}
+## 🎯 核心焦点 (1分钟速读)
+{一句话总结今天群内讨论最热烈的 1-2 个方向，直接写结论，不写废话}
 
-### 🔗 分享资源
-{resources 列表：名称 + 链接 + 群友评价}
+## 💼 项目协同与讨论
+{今日决议、阻碍、待办。无内容则写”今日无明确协同事项”，不省略此节}
+- **决议**：{decisions，无则省略此行}
+- **阻碍**：{blockers，无则省略此行}
+- **待办**：{action_items，无则省略此行}
 
-### 🎯 今日关注焦点
-{hot_topics 列表：话题名 + 一句话摘要 + 立场描述}
+## 🔗 优质信息源
+{群内分享的链接、工具、论文。格式如下，无资源则写”今日无资源分享”}
+- **[资源名称](URL)** — 群友评价：{评价原文，无评价则留空}
+
+## 💡 深度观点碰撞
+{对新模型、新产品、行业趋势的深度分析与观点。无则写”今日无深度讨论”}
+- {观点描述，保留立场和态度，去掉口水话}
 ```
 
 **写入规则**：
-- 每次运行创建一个独立的新页面，不修改已有内容
-- 页面标题包含日期，确保在 Wiki 目录树中清晰排列
-- 内容保持简洁，不写原始消息，不出现具体人名
+- 每次运行创建一个独立新页面，不修改已有页面
+- 内容不出现具体人名，用”有同学提到”代替
+- 完成后输出生成的 Wiki 文档 URL，方便用户直接跳转查看
 
 ---
 

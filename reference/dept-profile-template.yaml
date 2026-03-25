@@ -17,7 +17,8 @@ department:
   freeform_context: ""       # Free text for AI context
   industry: ""               # Industry/business model label (separate from domain)
   feishu_group_id: ""        # Set via /ai-daily set-group <chat_id>
-  chat_summary_wiki_url: "" # Feishu Wiki URL to append daily chat summaries (Step 1-E)
+  chat_summary_wiki_node: "" # Feishu Wiki Node Token to create daily summary docs under (Step 1-E)
+                              # e.g. "ThhTwhgRRiQmi7kPRGycnkaTnoe" (the token part of the Wiki URL)
 
 # KB init configuration (defaults; override here to adjust)
 kb_init:
