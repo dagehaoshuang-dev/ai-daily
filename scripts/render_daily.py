@@ -13,7 +13,9 @@ from __future__ import annotations
 import argparse
 import base64
 import json
-from datetime import datetime
+import re
+import sys
+from datetime import datetime, timedelta
 from html import escape
 from pathlib import Path
 from typing import Any
@@ -229,6 +231,7 @@ def normalize_articles(items: Any) -> list[dict[str, Any]]:
                 "title": article.get("title", ""),
                 "priority": priority,
                 "time_label": article.get("time_label", ""),
+                "source_date": article.get("source_date", ""),
                 "source": article.get("source", ""),
                 "url": article.get("url", "#"),
                 "summary": summary,
@@ -805,7 +808,103 @@ def parse_args() -> argparse.Namespace:
         "--output",
         help="Output HTML file path; defaults to input path with .html suffix",
     )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="即使时间窗口校验有严重警告也继续渲染",
+    )
     return parser.parse_args()
+
+
+def check_time_window(payload: dict[str, Any], window_days: int = 3) -> list[str]:
+    """检查文章的 time_label 和 source_date，返回警告列表。
+
+    校验三层：
+    1. time_label 是否使用了模糊表述
+    2. time_label 中的日期是否在窗口内
+    3. source_date 与 time_label 是否一致（交叉校验，防止虚假日期）
+    """
+    warnings: list[str] = []
+    meta_date = payload.get("meta", {}).get("date", "")
+    try:
+        report_date = datetime.strptime(meta_date, "%Y-%m-%d")
+    except ValueError:
+        return warnings
+    window_start = report_date - timedelta(days=window_days - 1)
+
+    vague_patterns = {"本周", "持续热门", "持续活跃", "近期", "最近", "近日"}
+
+    for article in payload.get("articles", []):
+        title = article.get("title", "")
+        time_label = article.get("time_label", "")
+        source_date = article.get("source_date", "")
+        article_id = article.get("id", "?")
+
+        # 层 1：模糊表述检测
+        for vague in vague_patterns:
+            if vague in time_label:
+                warnings.append(
+                    f"  [{article_id}] time_label 使用了模糊表述 \"{time_label}\"，"
+                    f"应改为具体日期 — {title}"
+                )
+                break
+
+        # 层 2：time_label 日期窗口检查
+        label_date = None
+        if time_label in {"今天", "今日"}:
+            label_date = report_date
+        else:
+            m = re.search(r"(\d{1,2})月(\d{1,2})日", time_label)
+            if m:
+                month, day = int(m.group(1)), int(m.group(2))
+                try:
+                    label_date = report_date.replace(month=month, day=day)
+                    if label_date > report_date:
+                        label_date = label_date.replace(year=label_date.year - 1)
+                except ValueError:
+                    pass
+
+        if label_date and label_date < window_start:
+            warnings.append(
+                f"  [{article_id}] time_label 日期 {time_label} 超出 {window_days} 日窗口"
+                f"（{window_start.strftime('%m-%d')} ~ {report_date.strftime('%m-%d')}）"
+                f" — {title}"
+            )
+
+        # 层 3：source_date 交叉校验
+        if not source_date:
+            warnings.append(
+                f"  [{article_id}] 缺少 source_date（来源发布日期证据）"
+                f" — {title}"
+            )
+        elif source_date == "unknown":
+            warnings.append(
+                f"  [{article_id}] source_date 为 unknown，无法验证日期真实性"
+                f" — {title}"
+            )
+        else:
+            try:
+                src_date = datetime.strptime(source_date, "%Y-%m-%d")
+                # 检查 source_date 是否在窗口内
+                if src_date < window_start or src_date > report_date:
+                    warnings.append(
+                        f"  [{article_id}] source_date {source_date} 超出窗口"
+                        f"（{window_start.strftime('%Y-%m-%d')} ~ "
+                        f"{report_date.strftime('%Y-%m-%d')}）— {title}"
+                    )
+                # 检查 source_date 与 time_label 是否一致
+                if label_date and src_date.date() != label_date.date():
+                    warnings.append(
+                        f"  [{article_id}] 日期不一致：time_label=\"{time_label}\" "
+                        f"但 source_date=\"{source_date}\" — {title}"
+                    )
+            except ValueError:
+                warnings.append(
+                    f"  [{article_id}] source_date 格式错误 \"{source_date}\"，"
+                    f"应为 YYYY-MM-DD — {title}"
+                )
+
+    return warnings
 
 
 def main() -> None:
@@ -818,6 +917,23 @@ def main() -> None:
         raise SystemExit(f"ERROR: payload JSON 解析失败: {exc}") from exc
     except ValueError as exc:
         raise SystemExit(f"ERROR: payload 契约校验失败: {exc}") from exc
+
+    time_warnings = check_time_window(payload)
+    # 区分严重警告（超窗/不一致）和轻度警告（缺少 source_date）
+    severe = [w for w in time_warnings if "超出" in w or "不一致" in w]
+    if time_warnings:
+        print("⚠️  时间窗口校验警告：", file=sys.stderr)
+        for w in time_warnings:
+            print(w, file=sys.stderr)
+        if severe and not args.force:
+            print(
+                f"\n❌ 发现 {len(severe)} 条严重问题（超窗或日期不一致），渲染已阻断。",
+                file=sys.stderr,
+            )
+            print("   修复 JSON 后重新渲染，或使用 --force 强制渲染。", file=sys.stderr)
+            raise SystemExit(1)
+        print("", file=sys.stderr)
+
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(render_html(payload), encoding="utf-8")
     print(f"Rendered {output_path}")

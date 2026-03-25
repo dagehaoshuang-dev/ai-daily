@@ -155,6 +155,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--source-type", default="", help="来源类型，例如 official/media/community")
     parser.add_argument("--title", default="", help="原始标题")
     parser.add_argument("--url", default="", help="原始链接")
+    parser.add_argument("--pub-date", default="", help="来源页面上的原始发布日期，格式 YYYY-MM-DD；无法确认时填 unknown")
     parser.add_argument("--language", default="", help="语言，例如 zh/en")
     parser.add_argument("--content", default="", help="直接传入原始文本内容")
     parser.add_argument("--content-file", help="从文件读取原始文本内容")
@@ -209,6 +210,8 @@ def render_block(args: argparse.Namespace, content: str) -> str:
         lines.append(f"title: {args.title}")
     if args.url:
         lines.append(f"url: {args.url}")
+    if args.pub_date:
+        lines.append(f"pub_date: {args.pub_date}")
     if args.language:
         lines.append(f"language: {args.language}")
     lines.extend(

@@ -61,6 +61,7 @@
       "title": "某厂商发布新一代平台，强化企业级协作能力",
       "priority": "major",
       "time_label": "今天",
+      "source_date": "2026-03-23",
       "source": "厂商官方博客",
       "url": "https://example.com/blog/platform-update",
       "summary": {
@@ -75,7 +76,8 @@
       "id": "article-2",
       "title": "开源项目 X 在过去一周星数增长 200%",
       "priority": "notable",
-      "time_label": "本周",
+      "time_label": "3月22日",
+      "source_date": "2026-03-22",
       "source": "GitHub",
       "url": "https://github.com/example/project-x",
       "summary": {
@@ -90,7 +92,8 @@
       "id": "article-3",
       "title": "新行业法规要求数据处理流程增加审计节点",
       "priority": "normal",
-      "time_label": "昨天",
+      "time_label": "3月22日",
+      "source_date": "2026-03-22",
       "source": "行业媒体",
       "url": "https://example.com/news/regulation-update",
       "summary": {

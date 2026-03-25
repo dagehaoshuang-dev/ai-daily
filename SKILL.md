@@ -141,6 +141,7 @@ AI 根据第一步制定的编辑策略，使用搜索工具并行抓取。
 - 不要一开始就抓取所有文章全文
 - 进入筛选与改写前，必须先完成原始采集数据留存
 - 原始数据优先通过 `scripts/save_raw_capture.py` 追加写入
+- **采集时必须传入 `--pub-date`**：每条候选的来源页面发布日期（格式 `YYYY-MM-DD`），无法确认时填 `unknown`
 
 时间窗口强约束（**这是硬性门槛，不是建议**）：
 
@@ -264,6 +265,7 @@ AI 根据第一步制定的编辑策略，使用搜索工具并行抓取。
 
 - 生成 `output/daily/{date}.json`
 - `meta`、`left_sidebar`、`articles`、`data_sources` 必须存在
+- 每条 article 必须包含 `source_date` 字段（格式 `YYYY-MM-DD`），值从 `output/raw/` 中对应记录的 `pub_date` 抄录，不得自行编造
 - `raw_capture_path` 应指向当前采集产物，例如：
   - `output/raw/{date}_index.txt`
   - 如已做深抓，可同时在内容或注释中说明 `output/raw/{date}_detail.txt`
@@ -272,7 +274,7 @@ AI 根据第一步制定的编辑策略，使用搜索工具并行抓取。
 
 生成 payload 后、渲染 HTML 前，逐项检查：
 
-1. **时间窗校验**：逐条确认 time_label 是具体日期且在窗口内
+1. **时间窗校验**：逐条确认 `time_label` 是具体日期且在窗口内，且与 `source_date` 一致。渲染脚本会做交叉比对，不一致会阻断渲染
 2. **信号比例**：primary 信号 ≥ 50%，media 信号 ≤ 30%，无 background 混入正文
 3. **主线一致性**：overview 和前 3 条正文是否与第四步确定的主线一致
 4. **板块覆盖**：检查本期是否覆盖了用户关注的主要话题方向，如有明显缺席在 trends.insight 中说明
@@ -305,7 +307,11 @@ AI 根据第一步制定的编辑策略，使用搜索工具并行抓取。
 
 ### 第七步：更新导航首页
 
-更新或创建 `output/index.html`，列出所有已生成的日报。
+调用 `scripts/render_index.py` 更新或创建 `output/index.html`，列出所有已生成的日报。
+
+```bash
+python3 scripts/render_index.py
+```
 
 ### 第八步：启动反馈服务
 
@@ -376,6 +382,7 @@ AI 根据第一步制定的编辑策略，使用搜索工具并行抓取。
 | `scripts/open_daily.py` | 打开已生成的日报页面，优先使用本地 HTTP 服务地址 | `python3 scripts/open_daily.py {date}` |
 | `scripts/save_raw_capture.py` | 保存搜索或抓取得到的原始资讯文本，可直接抓取 URL 并追加写入 | `python3 scripts/save_raw_capture.py {date} --append ...` |
 | `scripts/build_queries.py` | 根据 profile.yaml 自动生成带日期过滤的搜索查询列表 | `python3 scripts/build_queries.py --date {date} --window 3` |
+| `scripts/render_index.py` | 扫描 `output/daily/` 生成导航首页 `output/index.html` | `python3 scripts/render_index.py` |
 | `scripts/feedback_server.py` | HTTP 静态服务 + 反馈接收，超时自动退出 | 后台运行 |
 
 注意：生成任务中，**采集、加工、筛选、摘要、行动建议由 AI 完成；HTML 结构输出优先由渲染脚本完成。** 评估任务中，AI 负责读取日报、构建 Ground Truth、完成打分和输出评估结果。

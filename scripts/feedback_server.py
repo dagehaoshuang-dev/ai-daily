@@ -6,6 +6,7 @@
 - 自动超时退出（默认 2 小时）
 - 端口冲突自动 +1（默认 17890 起）
 """
+import fcntl
 import http.server
 import hashlib
 import json
@@ -270,8 +271,17 @@ class FeedbackHandler(http.server.SimpleHTTPRequestHandler):
         self._cors_headers()
         self.end_headers()
 
+    MAX_BODY_SIZE = 2 * 1024 * 1024  # 2 MB
+
     def _handle_feedback(self):
         length = int(self.headers.get("Content-Length", 0))
+        if length > self.MAX_BODY_SIZE:
+            self.send_response(413)
+            self.send_header("Content-Type", "application/json")
+            self._cors_headers()
+            self.end_headers()
+            self.wfile.write(b'{"ok":false,"error":"payload_too_large"}')
+            return
         try:
             body = json.loads(self.rfile.read(length)) if length else {}
         except json.JSONDecodeError:
@@ -318,28 +328,34 @@ class FeedbackHandler(http.server.SimpleHTTPRequestHandler):
 
         FEEDBACK_DIR.mkdir(parents=True, exist_ok=True)
 
-        # 追加合并
-        existing = {"sessions": []}
-        if filepath.exists():
+        # 追加合并（文件锁保护并发写入）
+        lock_path = filepath.with_suffix(".lock")
+        with open(lock_path, "w") as lock_fh:
+            fcntl.flock(lock_fh, fcntl.LOCK_EX)
             try:
-                existing = json.loads(filepath.read_text(encoding="utf-8"))
-            except (json.JSONDecodeError, IOError):
-                pass
-        if not isinstance(existing, dict) or not isinstance(existing.get("sessions"), list):
-            existing = {"sessions": []}
+                existing = {"sessions": []}
+                if filepath.exists():
+                    try:
+                        existing = json.loads(filepath.read_text(encoding="utf-8"))
+                    except (json.JSONDecodeError, IOError):
+                        pass
+                if not isinstance(existing, dict) or not isinstance(existing.get("sessions"), list):
+                    existing = {"sessions": []}
 
-        if is_duplicate_session(existing["sessions"], normalized):
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self._cors_headers()
-            self.end_headers()
-            self.wfile.write(b'{"ok":true,"deduped":true}')
-            return
+                if is_duplicate_session(existing["sessions"], normalized):
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json")
+                    self._cors_headers()
+                    self.end_headers()
+                    self.wfile.write(b'{"ok":true,"deduped":true}')
+                    return
 
-        existing["sessions"].append(normalized)
-        filepath.write_text(
-            json.dumps(existing, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
+                existing["sessions"].append(normalized)
+                filepath.write_text(
+                    json.dumps(existing, ensure_ascii=False, indent=2), encoding="utf-8"
+                )
+            finally:
+                fcntl.flock(lock_fh, fcntl.LOCK_UN)
 
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
