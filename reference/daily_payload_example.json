@@ -70,7 +70,18 @@
       },
       "relevance": "如果你在评估企业级工具，这次更新直接影响你的选型基线和集成成本。",
       "tags": ["#平台更新", "#企业协作", "#治理"],
-      "is_exploration": false
+      "is_exploration": false,
+      "credibility": {
+        "confidence": "high",
+        "source_tier": "tier-1",
+        "cross_refs": 3,
+        "evidence": "官方博客原文，2 家主流媒体交叉报道",
+        "sources": [
+          {"name": "厂商官方博客", "url": "https://example.com/blog/platform-update"},
+          {"name": "TechCrunch 报道", "url": "https://techcrunch.com/2026/03/23/platform-update"},
+          {"name": "36氪 报道", "url": "https://36kr.com/p/example-article"}
+        ]
+      }
     },
     {
       "id": "article-2",
@@ -86,7 +97,13 @@
       },
       "relevance": "如果你的产品需要类似功能，这个项目可能成为你的基础组件选项之一。",
       "tags": ["#开源", "#社区增长", "#基础设施"],
-      "is_exploration": false
+      "is_exploration": false,
+      "credibility": {
+        "confidence": "medium",
+        "source_tier": "tier-2",
+        "cross_refs": 1,
+        "evidence": "GitHub 仓库数据 + 社区讨论"
+      }
     },
     {
       "id": "article-3",
@@ -102,7 +119,13 @@
       },
       "relevance": "如果你的产品涉及用户数据处理，需要尽快评估现有流程是否满足新要求。",
       "tags": ["#合规", "#数据安全", "#法规"],
-      "is_exploration": false
+      "is_exploration": false,
+      "credibility": {
+        "confidence": "high",
+        "source_tier": "tier-2",
+        "cross_refs": 2,
+        "evidence": "行业媒体报道 + 官方政策文件引用"
+      }
     }
   ],
   "data_sources": ["厂商官方博客", "GitHub", "行业媒体", "社区论坛"]

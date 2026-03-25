@@ -201,7 +201,29 @@ AI 根据第一步制定的编辑策略，使用搜索工具并行抓取。
   - **同一事件但有新进展** → 保留，但在标题或摘要中标注为”跟进”，并引用之前报道的日期
 - 如果 `output/daily/` 为空或无历史 JSON，跳过去重，不报错
 
-#### 3.2 信号分层
+#### 3.2 候选池内合并去重与交叉引用计数
+
+对当期候选池内的重复报道，不要简单丢弃，而是**合并为一条并记录交叉引用数**：
+
+- 同一事件有多个来源报道 → 保留来源等级最高（tier-1 > tier-2 > tier-3）的那条，记录总来源数量为 `cross_refs`
+- 合并时保留最佳来源的标题、URL、摘要，但在 `credibility.evidence` 中列出所有来源名
+- `cross_refs >= 2` 的条目在最终日报中会显示”多源验证”徽章
+
+#### 3.3 可信度评估
+
+对去重后的每条候选，标注可信度（credibility）三个维度：
+
+| 维度 | 字段 | 取值 | 判定标准 |
+|------|------|------|---------|
+| 置信度 | `confidence` | high / medium / low | high: 有官方原文或可验证事实；medium: 有具体信息但来源非一手；low: 传闻、”据报道”、无具体细节 |
+| 来源等级 | `source_tier` | tier-1 / tier-2 / tier-3 | tier-1: 官方博客/公告/新闻稿/GitHub 官方仓库；tier-2: 主流媒体（TechCrunch、36氪 等）；tier-3: 社区论坛/自媒体/个人博客 |
+| 交叉引用 | `cross_refs` | 整数 | 同一事件被多少个不同来源报道（从 3.2 合并去重中获得） |
+
+- `profile.yaml` 中 `sources.direct` 列出的来源自动视为 tier-1
+- 采集时已通过 `save_raw_capture.py --source-tier` 记录的等级可直接引用
+- 如果无法判定置信度，默认标注 `medium`
+
+#### 3.4 信号分层
 
 对去重后的候选池，按信号类型分类：
 
@@ -269,6 +291,7 @@ AI 根据第一步制定的编辑策略，使用搜索工具并行抓取。
 - 生成 `output/daily/{date}.json`
 - `meta`、`left_sidebar`、`articles`、`data_sources` 必须存在
 - 每条 article 必须包含 `source_date` 字段（格式 `YYYY-MM-DD`），值从 `output/raw/` 中对应记录的 `pub_date` 抄录，不得自行编造
+- 每条 article 必须包含 `credibility` 对象，含 `confidence`、`source_tier`、`cross_refs`、`evidence` 四个字段（结构参见 `reference/daily_payload_example.json`）
 - `raw_capture_path` 应指向当前采集产物，例如：
   - `output/raw/{date}_index.txt`
   - 如已做深抓，可同时在内容或注释中说明 `output/raw/{date}_detail.txt`
@@ -279,8 +302,9 @@ AI 根据第一步制定的编辑策略，使用搜索工具并行抓取。
 
 1. **时间窗校验**：逐条确认 `time_label` 是具体日期且在窗口内，且与 `source_date` 一致。渲染脚本会做交叉比对，不一致会阻断渲染
 2. **信号比例**：primary 信号 ≥ 50%，media 信号 ≤ 30%，无 background 混入正文
-3. **主线一致性**：overview 和前 3 条正文是否与第四步确定的主线一致
-4. **板块覆盖**：检查本期是否覆盖了用户关注的主要话题方向，如有明显缺席在 trends.insight 中说明
+3. **可信度检查**：每条 article 都有 `credibility` 对象；`confidence: low` 的条目不应超过 1 条；前 3 条应优先为 `confidence: high`
+4. **主线一致性**：overview 和前 3 条正文是否与第四步确定的主线一致
+5. **板块覆盖**：检查本期是否覆盖了用户关注的主要话题方向，如有明显缺席在 trends.insight 中说明
 
 如发现问题，修正后再继续渲染。
 

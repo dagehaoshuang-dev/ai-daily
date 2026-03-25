@@ -153,6 +153,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--query", default="", help="本条记录对应的搜索词或抓取任务")
     parser.add_argument("--source", default="", help="来源名")
     parser.add_argument("--source-type", default="", help="来源类型，例如 official/media/community")
+    parser.add_argument("--source-tier", default="", help="来源等级：tier-1(官方一手) / tier-2(主流媒体) / tier-3(社区自媒体)")
     parser.add_argument("--title", default="", help="原始标题")
     parser.add_argument("--url", default="", help="原始链接")
     parser.add_argument("--pub-date", default="", help="来源页面上的原始发布日期，格式 YYYY-MM-DD；无法确认时填 unknown")
@@ -206,6 +207,8 @@ def render_block(args: argparse.Namespace, content: str) -> str:
         lines.append(f"source: {args.source}")
     if args.source_type:
         lines.append(f"source_type: {args.source_type}")
+    if args.source_tier:
+        lines.append(f"source_tier: {args.source_tier}")
     if args.title:
         lines.append(f"title: {args.title}")
     if args.url:

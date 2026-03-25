@@ -30,6 +30,18 @@ PRIORITY_ICON = {
     "normal": "",
 }
 
+SOURCE_TIER_BADGE = {
+    "tier-1": '<span class="inline-flex items-center gap-0.5 text-[10px] text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded ml-1.5" title="官方一手来源"><i class="fa-solid fa-shield-halved text-[9px]"></i>一手</span>',
+    "tier-2": '<span class="inline-flex items-center gap-0.5 text-[10px] text-blue-500 bg-blue-50 px-1.5 py-0.5 rounded ml-1.5" title="主流媒体来源"><i class="fa-solid fa-newspaper text-[9px]"></i>媒体</span>',
+    "tier-3": '<span class="inline-flex items-center gap-0.5 text-[10px] text-gray-400 bg-gray-50 px-1.5 py-0.5 rounded ml-1.5" title="社区来源"><i class="fa-solid fa-users text-[9px]"></i>社区</span>',
+}
+
+CONFIDENCE_ICON = {
+    "high": '<span class="inline-flex items-center gap-0.5 text-[10px] text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded ml-1" title="高置信度"><i class="fa-solid fa-circle-check text-[9px]"></i>高可信</span>',
+    "medium": '<span class="inline-flex items-center gap-0.5 text-[10px] text-amber-500 bg-amber-50 px-1.5 py-0.5 rounded ml-1" title="中等置信度"><i class="fa-solid fa-circle-minus text-[9px]"></i>待验证</span>',
+    "low": '<span class="inline-flex items-center gap-0.5 text-[10px] text-red-400 bg-red-50 px-1.5 py-0.5 rounded ml-1" title="低置信度"><i class="fa-solid fa-circle-exclamation text-[9px]"></i>存疑</span>',
+}
+
 ACTION_META = {
     "learn": {
         "label": "建议学习",
@@ -227,6 +239,9 @@ def normalize_articles(items: Any) -> list[dict[str, Any]]:
         summary = article.get("summary", "")
         if not isinstance(summary, (dict, str)):
             raise ValueError(f"payload.articles[{idx}].summary 必须为字符串或对象")
+        credibility = article.get("credibility")
+        if credibility is not None and not isinstance(credibility, dict):
+            credibility = None
         normalized.append(
             {
                 "id": article.get("id") or f"article-{idx}",
@@ -240,6 +255,7 @@ def normalize_articles(items: Any) -> list[dict[str, Any]]:
                 "relevance": article.get("relevance", ""),
                 "tags": [str(tag) for tag in tags],
                 "is_exploration": bool(article.get("is_exploration")),
+                "credibility": credibility,
             }
         )
     return normalized
@@ -272,6 +288,50 @@ def normalize_payload(payload: Any) -> dict[str, Any]:
     }
 
 
+def render_credibility_badges(credibility: dict[str, Any] | None) -> str:
+    """渲染置信度、来源等级和交叉引用徽章。"""
+    if not credibility:
+        return ""
+    parts: list[str] = []
+    tier = credibility.get("source_tier", "")
+    if tier in SOURCE_TIER_BADGE:
+        parts.append(SOURCE_TIER_BADGE[tier])
+    conf = credibility.get("confidence", "")
+    if conf in CONFIDENCE_ICON:
+        parts.append(CONFIDENCE_ICON[conf])
+    cross = credibility.get("cross_refs")
+    if isinstance(cross, int) and cross >= 2:
+        # 构建 tooltip 内容：优先用 sources 数组渲染可点击链接，fallback 到 evidence 文本
+        sources_list = credibility.get("sources", [])
+        if isinstance(sources_list, list) and sources_list:
+            link_items = []
+            for src in sources_list:
+                if not isinstance(src, dict):
+                    continue
+                name = h(src.get("name", ""))
+                url = src.get("url", "")
+                if name and url:
+                    link_items.append(
+                        f'<a href="{h(url)}" target="_blank" '
+                        f'class="cred-tooltip-link">{name}'
+                        f'<i class="fa-solid fa-arrow-up-right-from-square text-[8px] ml-0.5 opacity-60"></i></a>'
+                    )
+                elif name:
+                    link_items.append(f'<span class="text-gray-300">{name}</span>')
+            tooltip_content = "".join(
+                f'<span class="cred-tooltip-row">{item}</span>' for item in link_items
+            )
+        else:
+            tooltip_content = h(credibility.get("evidence", f"{cross} 个来源交叉报道"))
+        parts.append(
+            f'<span class="cred-tooltip inline-flex items-center gap-0.5 text-[10px] text-violet-500 bg-violet-50 px-1.5 py-0.5 rounded ml-1 cursor-help">'
+            f'<i class="fa-solid fa-code-merge text-[9px]"></i>{cross}源验证'
+            f'<span class="cred-tooltip-text">{tooltip_content}</span>'
+            f'</span>'
+        )
+    return "".join(parts)
+
+
 def render_article(article: dict[str, Any], index: int) -> str:
     article_id = article.get("id") or f"article-{index}"
     exploration = bool(article.get("is_exploration"))
@@ -298,13 +358,15 @@ def render_article(article: dict[str, Any], index: int) -> str:
             f"<strong>与你相关：</strong>{relevance}</div>"
         )
 
+    cred_badges = render_credibility_badges(article.get("credibility"))
+
     return f"""        <article class="bg-white rounded-xl shadow-sm p-4 card-hover{border}"
                  data-article-id="{h(article_id)}" data-title="{title}" data-tags="{h(serialize_tags_attr(tags))}">
           <div class="flex items-start justify-between">
             <h3 class="text-[15px] font-semibold text-primary leading-snug">{title_prefix}{title}</h3>
             <span class="text-xs text-gray-400 whitespace-nowrap ml-3">{time_label}</span>
           </div>
-          <p class="text-xs text-gray-400 mt-1"><i class="fa-solid fa-link mr-1"></i>{source}</p>
+          <p class="text-xs text-gray-400 mt-1"><i class="fa-solid fa-link mr-1"></i>{source}{cred_badges}</p>
           <div class="ai-gradient-line pl-3 my-2.5 text-[13px] text-gray-600 leading-relaxed">
             {render_summary(article.get("summary", ""))}
           </div>
@@ -487,6 +549,26 @@ def render_html(payload: dict[str, Any]) -> str:
       cursor: pointer; transition: all 0.15s ease; color: #C4B5FD; white-space: nowrap;
     }}
     .card-ai-btn:hover {{ background: #6C5CE7; color: white; }}
+
+    .cred-tooltip {{ position: relative; }}
+    .cred-tooltip .cred-tooltip-text {{
+      visibility: hidden; opacity: 0;
+      position: absolute; bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%);
+      background: #1A1A2E; color: #fff; font-size: 11px; line-height: 1.5;
+      padding: 8px 12px; border-radius: 8px; white-space: nowrap; z-index: 100;
+      transition: opacity 0.15s ease, visibility 0.15s ease;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }}
+    .cred-tooltip .cred-tooltip-text::after {{
+      content: ''; position: absolute; top: 100%; left: 50%; transform: translateX(-50%);
+      border: 5px solid transparent; border-top-color: #1A1A2E;
+    }}
+    .cred-tooltip:hover .cred-tooltip-text {{ visibility: visible; opacity: 1; }}
+    .cred-tooltip-row {{ display: block; padding: 2px 0; }}
+    .cred-tooltip-link {{
+      color: #C4B5FD; text-decoration: none; transition: color 0.1s ease;
+    }}
+    .cred-tooltip-link:hover {{ color: #fff; text-decoration: underline; }}
 
     .toast {{
       position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(80px);
