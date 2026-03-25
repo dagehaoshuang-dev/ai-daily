@@ -18,7 +18,7 @@ department:
   industry: ""               # Industry/business model label (separate from domain)
   feishu_group_id: ""        # Set via /ai-daily set-group <chat_id>
   chat_summary_wiki_node: "" # Feishu Wiki Node Token to create daily summary docs under (Step 1-E)
-                              # e.g. "ThhTwhgRRiQmi7kPRGycnkaTnoe" (the token part of the Wiki URL)
+                              # Extract from your Wiki URL: feishu.cn/wiki/{token}
 
 # KB init configuration (defaults; override here to adjust)
 kb_init:

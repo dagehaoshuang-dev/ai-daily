@@ -332,7 +332,7 @@ runtime:
 
 完成 1-D 画像演进后，将今日群聊总结作为**独立新子页面**创建在飞书知识库的指定节点下，供团队成员人工查阅。
 
-**目标父节点**：`department.chat_summary_wiki_node`（Wiki Node Token，如 `ThhTwhgRRiQmi7kPRGycnkaTnoe`）。
+**目标父节点**：`department.chat_summary_wiki_node`（Wiki Node Token，从 `config/dept-profile.yaml` 读取）。
 
 **前置检查**：
 1. 读取 `runtime.feishu_tools.doc_create`
