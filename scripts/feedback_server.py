@@ -14,12 +14,10 @@ import os
 import sys
 import socket
 import time
-import threading
 from pathlib import Path
 from functools import partial
 
 DEFAULT_PORT = 17890
-DEFAULT_TIMEOUT_HOURS = 2
 DEFAULT_HOST = "0.0.0.0"
 
 
@@ -55,6 +53,7 @@ ROOT_DIR = resolve_root_dir()
 OUTPUT_DIR = ROOT_DIR / "output"
 FEEDBACK_DIR = ROOT_DIR / "data" / "feedback"
 PORT_FILE = ROOT_DIR / "data" / ".server_port"
+PID_FILE = ROOT_DIR / "data" / ".server_pid"
 
 
 def normalize_feedback_payload(body):
@@ -409,12 +408,7 @@ def load_server_config():
                 # 去掉行内注释（空格+#）
                 if " #" in line:
                     line = line[: line.index(" #")].rstrip()
-                if line.startswith("timeout_hours:"):
-                    try:
-                        cfg["timeout_hours"] = float(line.split(":")[1].strip())
-                    except ValueError:
-                        pass
-                elif line.startswith("host:"):
+                if line.startswith("host:"):
                     cfg["host"] = line.split(":", 1)[1].strip().strip("'\"")
                 elif line.startswith("port:"):
                     try:
@@ -425,11 +419,50 @@ def load_server_config():
     return {}
 
 
+def stop_existing_server():
+    """检查并关闭已在运行的服务进程。"""
+    if not PID_FILE.exists():
+        return
+    try:
+        old_pid = int(PID_FILE.read_text(encoding="utf-8").strip())
+    except (ValueError, IOError):
+        PID_FILE.unlink(missing_ok=True)
+        return
+    # 检查进程是否存活
+    try:
+        os.kill(old_pid, 0)
+    except OSError:
+        # 进程已不存在，清理残留文件
+        PID_FILE.unlink(missing_ok=True)
+        PORT_FILE.unlink(missing_ok=True)
+        return
+    # 进程存活，发送 SIGTERM 关闭
+    print(f"发现已有服务进程 (PID {old_pid})，正在关闭...")
+    try:
+        os.kill(old_pid, 15)  # SIGTERM
+        # 等待最多 3 秒
+        for _ in range(30):
+            time.sleep(0.1)
+            try:
+                os.kill(old_pid, 0)
+            except OSError:
+                break
+        else:
+            # 3 秒后仍存活，强制 kill
+            os.kill(old_pid, 9)  # SIGKILL
+    except OSError:
+        pass
+    PID_FILE.unlink(missing_ok=True)
+    PORT_FILE.unlink(missing_ok=True)
+    print("已关闭旧服务。")
+
+
 def main():
+    stop_existing_server()
+
     cfg = load_server_config()
     bind_host = cfg.get("host", DEFAULT_HOST)
     port_base = cfg.get("port", DEFAULT_PORT)
-    timeout_hours = cfg.get("timeout_hours", DEFAULT_TIMEOUT_HOURS)
 
     port, port_error = find_port(port_base, bind_host)
     if not port:
@@ -455,22 +488,16 @@ def main():
                 print(f"       最后一次错误: {port_error}", file=sys.stderr)
         sys.exit(1)
 
-    # 超时自动退出
-    def auto_exit():
-        print(f"\n⏰ 已运行 {timeout_hours} 小时，自动停止。")
-        PORT_FILE.unlink(missing_ok=True)
-        os._exit(0)
-
-    threading.Timer(timeout_hours * 3600, auto_exit).start()
-
     # 启动服务
     handler = partial(FeedbackHandler, directory=str(OUTPUT_DIR))
     server = http.server.HTTPServer((bind_host, port), handler)
 
     PORT_FILE.parent.mkdir(parents=True, exist_ok=True)
     PORT_FILE.write_text(str(port))
+    PID_FILE.write_text(str(os.getpid()))
 
     print("✅ 日报服务已启动")
+    print(f"   PID: {os.getpid()}")
     print(f"   监听地址: {bind_host}:{port}")
     print(f"   本机访问: http://localhost:{port}")
     if bind_host in {"0.0.0.0", ""}:
@@ -481,7 +508,6 @@ def main():
                 print(f"   - http://{ip}:{port}")
     print(f"   静态目录: {OUTPUT_DIR}")
     print(f"   反馈写入: {FEEDBACK_DIR}")
-    print(f"   {timeout_hours} 小时后自动停止")
     print(f"   按 Ctrl+C 手动停止")
     sys.stdout.flush()
 
@@ -489,7 +515,9 @@ def main():
         server.serve_forever()
     except KeyboardInterrupt:
         print("\n🛑 手动停止服务")
+    finally:
         PORT_FILE.unlink(missing_ok=True)
+        PID_FILE.unlink(missing_ok=True)
 
 
 if __name__ == "__main__":
