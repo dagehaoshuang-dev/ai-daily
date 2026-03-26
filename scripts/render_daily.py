@@ -578,26 +578,29 @@ def render_html(payload: dict[str, Any]) -> str:
     .toast.show {{ transform: translateX(-50%) translateY(0); opacity: 1; }}
   </style>
 </head>
-<body class="bg-[#FAFBFC] text-primary h-screen overflow-hidden flex flex-col">
+<body class="bg-[#FAFBFC] text-primary lg:h-screen lg:overflow-hidden flex flex-col">
 
-  <header class="flex-shrink-0 bg-white border-b border-gray-100 px-8 py-4">
-    <div class="flex items-center justify-between max-w-[1600px] mx-auto">
-      <div class="flex items-center gap-4">
-        <h1 class="text-2xl font-bold text-primary"><i class="fa-solid fa-newspaper text-accent mr-2"></i>你的日报</h1>
-        <span class="text-gray-300">|</span>
-        <p class="text-gray-500 text-sm"><i class="fa-regular fa-calendar mr-1"></i>{date_label}</p>
-        <span class="bg-accent/10 text-accent text-xs font-medium px-2.5 py-1 rounded-full">{item_count} 条资讯</span>
+  <header class="flex-shrink-0 bg-white border-b border-gray-100 px-4 lg:px-8 py-3 lg:py-4">
+    <div class="max-w-[1600px] mx-auto">
+      <div class="flex items-center justify-between">
+        <h1 class="text-lg lg:text-2xl font-bold text-primary"><i class="fa-solid fa-newspaper text-accent mr-1.5 lg:mr-2"></i>AI情报站</h1>
+        <div class="flex items-center gap-2">
+          <span class="text-gray-400 text-xs hidden lg:inline"><i class="fa-regular fa-clock mr-1"></i>生成于 {generated_time}</span>
+          <span class="inline-block bg-[#F3F0FF] text-accent text-xs font-medium px-2 lg:px-3 py-1 lg:py-1.5 rounded-full"><i class="fa-solid fa-user mr-1"></i>{role}</span>
+        </div>
       </div>
-      <div class="flex items-center gap-4">
-        <span class="text-gray-400 text-xs"><i class="fa-regular fa-clock mr-1"></i>生成于 {generated_time}</span>
-        <span class="inline-block bg-[#F3F0FF] text-accent text-xs font-medium px-3 py-1.5 rounded-full"><i class="fa-solid fa-user mr-1"></i>{role}</span>
+      <div class="flex items-center gap-2 mt-1 lg:mt-0.5 text-xs text-gray-400">
+        <span><i class="fa-regular fa-calendar mr-1"></i>{date_label}</span>
+        <span class="text-gray-200">·</span>
+        <span class="bg-accent/10 text-accent font-medium px-2 py-0.5 rounded-full">{item_count} 条资讯</span>
+        <span class="lg:hidden"><span class="text-gray-200 mx-0.5">·</span><i class="fa-regular fa-clock mr-0.5"></i>{generated_time}</span>
       </div>
     </div>
   </header>
 
-  <div class="flex-1 flex overflow-hidden max-w-[1600px] mx-auto w-full">
+  <div class="flex-1 flex flex-col lg:flex-row lg:overflow-hidden max-w-[1600px] mx-auto w-full">
 
-    <aside class="w-[420px] flex-shrink-0 border-r border-gray-100 bg-white overflow-y-auto sidebar-scroll">
+    <aside class="w-full lg:w-[420px] flex-shrink-0 border-b lg:border-b-0 lg:border-r border-gray-100 bg-white lg:overflow-y-auto sidebar-scroll">
       <div class="p-5 space-y-5">
 
         <section>
@@ -634,7 +637,7 @@ def render_html(payload: dict[str, Any]) -> str:
       </div>
     </aside>
 
-    <main class="flex-1 overflow-y-auto feed-scroll px-8 py-6 min-w-0">
+    <main class="flex-1 lg:overflow-y-auto feed-scroll px-4 lg:px-8 py-6 min-w-0">
       <h2 class="text-lg font-semibold text-primary mb-4 flex items-center">
         <span class="w-7 h-7 rounded-lg bg-accent/10 flex items-center justify-center mr-2.5"><i class="fa-solid fa-newspaper text-accent text-xs"></i></span>
         今日资讯<span class="text-xs text-gray-400 font-normal ml-3">按相关度排序 · 共 {item_count} 条</span>
