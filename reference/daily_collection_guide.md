@@ -23,8 +23,9 @@
 7. 社区、研究、开源等多样性信号用于补足，不应长期缺位
 8. 采集过程必须完整留存原始数据，再进入去重、筛选、排序和改写
 
-Agent Reach 安装要求：
+Agent Reach 安装与检查：
 
+- **Agent Reach 是一个 Claude Code Skill（技能），不是 CLI 命令行工具**
 - 安装文档：`https://raw.githubusercontent.com/Panniantong/agent-reach/main/docs/install.md`
 - 若未安装，先按该文档完成安装和健康检查，再继续采集
 - 安装完成后，优先使用 Agent Reach 已提供的渠道能力建立候选池和执行深抓
@@ -33,10 +34,13 @@ Agent Reach 安装要求：
 
 进入采集阶段后，必须先完成以下动作，才能开始真正抓取：
 
-1. 运行 `agent-reach doctor`
-2. 记录 doctor 输出里的可用渠道、不可用渠道、缺失配置与代理要求
-3. 根据 doctor 结果选择上游工具；不要把 Agent Reach 误解成单一抓取命令
-4. 只有在确认对应渠道不可用、未配置、被权限限制、或目标来源无法覆盖时，才允许退回其他工具
+1. **检查是否已安装**：判断 `~/.agent-reach-venv` 目录是否存在。存在则已安装，不存在则按安装文档安装
+2. **运行 doctor**：`source ~/.agent-reach-venv/bin/activate && agent-reach doctor`
+   - **不要**直接运行 `agent-reach doctor`（不激活 venv 会报 command not found）
+   - **不要**用 `which agent-reach` 检查安装状态
+3. 记录 doctor 输出里的可用渠道（✅）、不可用渠道（--）、缺失配置与代理要求
+4. 根据 doctor 结果选择上游工具。doctor 确认可用的上游工具（`gh`、`mcporter`、`curl` 等）可直接在 Bash 中调用，不需要激活 venv
+5. 只有在确认对应渠道不可用、未配置、被权限限制、或目标来源无法覆盖时，才允许退回其他工具
 
 这不是建议，而是执行门槛。没有完成这一步，不应直接进入普通搜索。
 

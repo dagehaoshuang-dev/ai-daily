@@ -139,7 +139,7 @@ AI 根据第一步制定的编辑策略，使用搜索工具并行抓取。
 
 - 采集时间窗口默认为**最近 3 日**；如果用户明确指定更短时间范围，则以用户要求为准；如果用户要求更长时间范围，必须先得到用户明确许可
 - 数据抓取默认优先使用 Agent Reach
-- 进入任何普通搜索、网页抓取、reader、fetch 之前，**必须先运行 `agent-reach doctor`**
+- 进入任何普通搜索、网页抓取、reader、fetch 之前，**必须先完成 Agent Reach 检查**
 - 如果当前环境未安装 Agent Reach 技能，先按安装文档完成安装：`https://raw.githubusercontent.com/Panniantong/agent-reach/main/docs/install.md`
 - 不要一开始就抓取所有文章全文
 - 进入筛选与改写前，必须先完成原始采集数据留存
@@ -159,24 +159,31 @@ AI 根据第一步制定的编辑策略，使用搜索工具并行抓取。
 
 强制执行顺序：
 
-1. 先检查 Agent Reach：
-   - 先运行 `agent-reach doctor`
-   - 记录 doctor 输出中的可用渠道、受限渠道、未配置渠道
-   - Agent Reach 的定位是“安装器 + 健康检查器”，真正采集时应使用它准备好的上游工具
-2. 如果 Agent Reach 可用：
-   - 候选池采集必须优先使用 doctor 已判定可用的上游工具，例如 `bird`、`gh`、`mcporter`、`curl https://r.jina.ai/...`、RSS 读取等
-   - 正文深抓也必须优先使用 doctor 已判定可用的上游工具
-3. 只有在以下情况之一成立时，才允许退回普通搜索或其他抓取方式：
-   - Agent Reach 未安装
-   - `agent-reach doctor` 运行失败
-   - `agent-reach doctor` 显示对应渠道未配置、权限不足、无代理或明显无法覆盖目标来源
-4. 一旦发生退回，必须在最终输出中明确说明：
-   - 本次是否先运行了 `agent-reach doctor`
+1. **检查 Agent Reach 是否已安装**：
+   - Agent Reach 安装在 Python venv 中，CLI 入口需要先激活 venv
+   - 检查方式：运行 `source ~/.agent-reach-venv/bin/activate && agent-reach doctor`
+   - **不要**直接运行 `agent-reach doctor`（不激活 venv 会找不到命令）
+   - **不要**用 `which agent-reach` 检查（venv 未激活时不在 PATH 中）
+   - 如果 `~/.agent-reach-venv` 目录不存在，则视为未安装
+2. **如果 Agent Reach 已安装**：
+   - 运行 `source ~/.agent-reach-venv/bin/activate && agent-reach doctor`
+   - 记录 doctor 输出中的可用渠道（✅）、受限渠道（--）
+   - 采集时优先使用 doctor 已判定可用的上游工具，例如 `gh`、`mcporter`、`curl https://r.jina.ai/...`、RSS 读取等
+   - 正文深抓也优先使用 doctor 已判定可用的上游工具
+3. **如果 Agent Reach 未安装**：
+   - 先按安装文档完成安装：`https://raw.githubusercontent.com/Panniantong/agent-reach/main/docs/install.md`
+   - 安装后重新执行步骤 1-2
+4. 只有在以下情况之一成立时，才允许退回普通搜索或其他抓取方式：
+   - Agent Reach 安装失败
+   - doctor 运行失败
+   - doctor 显示对应渠道未配置、权限不足、无代理或明显无法覆盖目标来源
+5. 一旦发生退回，必须在最终输出中明确说明：
+   - 本次是否成功调用了 Agent Reach doctor
    - 本次实际使用了哪些 Agent Reach 提供的上游工具
    - 没有使用或只部分使用的具体原因
    - 哪些来源是由备用方案补齐的
 
-执行时不要把 Agent Reach 理解成单一抓取命令；正确做法是先 doctor，再按可用渠道选择上游工具，并保留 doctor 结论与退回原因。
+注意：Agent Reach 的上游工具（`gh`、`mcporter`、`curl` 等）是独立的命令行工具，在 doctor 确认可用后可直接在 Bash 中调用，不需要每次都激活 venv。venv 激活只在运行 `agent-reach` 自身命令时需要。
 
 高层原则：
 
